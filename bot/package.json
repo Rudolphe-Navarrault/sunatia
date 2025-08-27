@@ -1,0 +1,58 @@
+{
+  "name": "sunatia-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord avec commandes slash, système d'XP et intégration MongoDB",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "cross-env NODE_ENV=development nodemon index.js",
+    "prod": "cross-env NODE_ENV=production node index.js",
+    "deploy-commands-dev": "node deploy-commands-dev.js",
+    "deploy-commands-prod": "node deploy-commands-prod.js",
+    "clean-global-commands": "node clean-global-commands.js",
+    "clean-guild-commands": "node clean-guild-commands.js",
+    "lint": "eslint . --ext .js",
+    "format": "prettier --write \"**/*.js\""
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.3.1",
+    "mongoose": "^8.0.3",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.0.0",
+    "eslint": "^8.48.0",
+    "nodemon": "^3.0.2",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es2021": true
+    },
+    "extends": [
+      "eslint:recommended",
+      "prettier"
+    ],
+    "parserOptions": {
+      "ecmaVersion": 12,
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-unused-vars": "warn",
+      "no-console": "off"
+    }
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": true,
+    "tabWidth": 2,
+    "trailingComma": "es5",
+    "printWidth": 100
+  }
+}
