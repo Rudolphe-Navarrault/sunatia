@@ -1,6 +1,10 @@
 require('dotenv').config();
+const express = require('express'); // <- il manquait
 const SunatiaBot = require('./src/bot');
 const logger = require('./src/utils/logger');
+
+const PORT = 3000;
+const app = express(); // <- il manquait
 
 // Créer une instance du bot
 const client = new SunatiaBot();
@@ -29,7 +33,7 @@ process.on('unhandledRejection', (reason, promise) => {
   });
 });
 
-// Démarrage du bot
+// Démarrage du bot et du serveur HTTP
 (async () => {
   try {
     await client.start();
@@ -38,6 +42,16 @@ process.on('unhandledRejection', (reason, promise) => {
     logger.error('❌ Erreur critique lors du démarrage du bot:', error);
     process.exit(1);
   }
+
+  // Route principale pour Render
+  app.get('/', (req, res) => {
+    res.send('Sunatia Bot en ligne !');
+  });
+
+  // Lancer le serveur HTTP pour Render
+  app.listen(PORT, () => {
+    logger.info(`🌐 Serveur HTTP lancé sur le port ${PORT}`);
+  });
 })();
 
 module.exports = client;
