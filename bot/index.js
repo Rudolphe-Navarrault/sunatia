@@ -1,22 +1,39 @@
 require('dotenv').config();
-const express = require('express'); // <- il manquait
+const express = require('express');
 const SunatiaBot = require('./src/bot');
 const logger = require('./src/utils/logger');
 
-const PORT = 3000;
-const app = express(); // <- il manquait
+const isDev = process.env.NODE_ENV === 'development';
+const PORT = process.env.PORT || 3000;
 
-// Créer une instance du bot
-const client = new SunatiaBot();
+console.log('='.repeat(80));
+logger.info(`🚀 Démarrage en mode ${isDev ? 'développement' : 'production'}`);
+logger.info(`📅 ${new Date().toISOString()}`);
 
-// Gestion des erreurs non capturées
-process.on('uncaughtException', (error) => {
-  logger.error('❌ Exception non gérée:', error);
+// Vérification des variables d'environnement
+const requiredEnvVars = isDev
+  ? ['DISCORD_TOKEN_DEV', 'CLIENT_ID_DEV', 'MONGO_URI_DEV', 'DEV_GUILD_ID']
+  : ['DISCORD_TOKEN', 'CLIENT_ID', 'MONGO_URI'];
+
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+if (missingVars.length > 0) {
+  logger.error(`❌ Variables d'environnement manquantes: ${missingVars.join(', ')}`);
+  process.exit(1);
+}
+
+const app = express();
+
+// Création du bot
+const client = new SunatiaBot({
+  isDev,
+  devGuildId: isDev ? process.env.DEV_GUILD_ID : null,
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('❌ Rejet de promesse non géré:', reason, promise);
-});
+// Gestion des erreurs globales
+process.on('uncaughtException', (error) => logger.error('❌ Exception non gérée:', error));
+process.on('unhandledRejection', (reason, promise) =>
+  logger.error('❌ Rejet de promesse non géré:', reason, promise)
+);
 
 // Gestion des signaux d'arrêt
 ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach((signal) => {
@@ -33,7 +50,7 @@ process.on('unhandledRejection', (reason, promise) => {
   });
 });
 
-// Démarrage du bot et du serveur HTTP
+// Démarrage du bot et serveur HTTP
 (async () => {
   try {
     await client.start();
@@ -43,15 +60,8 @@ process.on('unhandledRejection', (reason, promise) => {
     process.exit(1);
   }
 
-  // Route principale pour Render
-  app.get('/', (req, res) => {
-    res.send('Sunatia Bot en ligne !');
-  });
-
-  // Lancer le serveur HTTP pour Render
-  app.listen(PORT, () => {
-    logger.info(`🌐 Serveur HTTP lancé sur le port ${PORT}`);
-  });
+  app.get('/', (req, res) => res.send('Sunatia Bot en ligne !'));
+  app.listen(PORT, () => logger.info(`🌐 Serveur HTTP lancé sur le port ${PORT}`));
 })();
 
 module.exports = client;

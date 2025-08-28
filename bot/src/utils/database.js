@@ -1,6 +1,7 @@
-const mongoose = require("mongoose");
-const config = require("../config");
-const User = require("../models/User");
+const mongoose = require('mongoose');
+const config = require('../config');
+const User = require('../models/User');
+const logger = require('./logger');
 
 class Database {
   constructor() {
@@ -8,56 +9,86 @@ class Database {
     this.models = { User };
     this.User = User;
     this.isConnected = false;
+    this.connection = null;
+
+    mongoose.connection.on('connected', () => {
+      logger.info('✅ Connecté à MongoDB');
+      this.isConnected = true;
+    });
+
+    mongoose.connection.on('error', (err) => {
+      logger.error('❌ Erreur de connexion MongoDB:', err);
+      this.isConnected = false;
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('🔌 Déconnecté de MongoDB');
+      this.isConnected = false;
+    });
   }
 
-  /** Connexion à MongoDB */
   async connect() {
-    if (this.isConnected) return;
+    if (this.isConnected) {
+      logger.info('✅ Déjà connecté à MongoDB');
+      return this.connection || mongoose.connection;
+    }
 
     try {
-      await mongoose.connect(config.mongo.uri, config.mongo.options);
-      this.isConnected = true;
-      console.log("✅ Connecté à MongoDB");
+      logger.info('🔄 Tentative de connexion à MongoDB...');
 
-      // Vérification et création des index
+      const uri = config.mongo.uri;
+      let safeUrl;
+      try {
+        const dbUrl = new URL(uri);
+        safeUrl = `${dbUrl.protocol}//${dbUrl.hostname}${dbUrl.pathname}`;
+      } catch {
+        safeUrl = uri.replace(/\/\/.*@/, '//***:***@');
+      }
+      logger.debug(`📡 Connexion à la base de données: ${safeUrl}`);
+
+      const options = { ...config.mongo.options };
+      this.connection = await mongoose.connect(uri, options);
+
+      // Ping pour vérifier la connexion
+      await this.connection.connection.db.admin().ping();
+      logger.info('✅ Connecté à MongoDB avec succès');
+
       await this.ensureIndexes();
+
+      const collections = await this.connection.connection.db.listCollections().toArray();
+      logger.debug(`📚 Collections disponibles: ${collections.map((c) => c.name).join(', ')}`);
+
+      return this.connection;
     } catch (error) {
-      console.error("❌ Erreur de connexion à MongoDB:", error);
-      process.exit(1);
+      logger.error('❌ Erreur de connexion à MongoDB:', error);
+      throw error;
     }
   }
 
-  /** Vérifie les index */
   async ensureIndexes() {
     try {
-      await User.syncIndexes();
-      console.log("✅ Index MongoDB vérifiés");
+      logger.info('🔍 Vérification des index MongoDB...');
+      await User.init();
+      logger.debug('✅ Index pour le modèle User vérifiés');
+      logger.info('✅ Tous les index MongoDB sont à jour');
     } catch (error) {
-      console.error("❌ Erreur lors de la création des index:", error);
+      logger.error('❌ Erreur lors de la vérification des index:', error);
+      throw error;
     }
   }
 
-  /**
-   * Récupère ou crée un utilisateur
-   * @param {Object} userData - { id, guildId, username, discriminator, avatar, bot }
-   */
   async getUser(userData) {
-    if (!userData?.id || !userData?.guildId) {
-      throw new Error("ID utilisateur et ID serveur requis");
-    }
+    if (!userData?.id || !userData?.guildId) throw new Error('ID utilisateur et ID serveur requis');
 
     const now = new Date();
-    let user = await User.findOne({
-      userId: userData.id,
-      guildId: userData.guildId,
-    });
+    let user = await User.findOne({ userId: userData.id, guildId: userData.guildId });
 
     if (!user) {
       user = new User({
         userId: userData.id,
         guildId: userData.guildId,
-        username: userData.username || "Inconnu",
-        discriminator: userData.discriminator || "0000",
+        username: userData.username || 'Inconnu',
+        discriminator: userData.discriminator || '0000',
         avatar: userData.avatar || null,
         bot: Boolean(userData.bot),
         joinedAt: now,
@@ -73,13 +104,13 @@ class Database {
         },
       });
       await user.save();
-      console.log(`✅ Utilisateur créé: ${user.username} (${user.userId})`);
+      logger.info(`✅ Utilisateur créé: ${user.username} (${user.userId})`);
       return user;
     }
 
-    // Mettre à jour si nécessaire
+    // Mise à jour si nécessaire
     let updated = false;
-    ["username", "discriminator", "avatar", "bot"].forEach((field) => {
+    ['username', 'discriminator', 'avatar', 'bot'].forEach((field) => {
       if (userData[field] !== undefined && user[field] !== userData[field]) {
         user[field] = userData[field];
         updated = true;
@@ -106,44 +137,32 @@ class Database {
     return user;
   }
 
-  /**
-   * Met à jour un utilisateur
-   * @param {string} userId
-   * @param {string} guildId
-   * @param {Object} updates - Champs à mettre à jour
-   * @param {boolean} [incrementMessages=false] - Incrémente le compteur de messages
-   */
   async updateUser(userId, guildId, updates = {}, incrementMessages = false) {
     const now = new Date();
     const dbUpdate = { $set: { ...updates, lastSeen: now }, $inc: {} };
 
     if (incrementMessages) {
-      dbUpdate.$inc["stats.messages"] = 1;
-      dbUpdate.$set["stats.lastMessage"] = now;
-      dbUpdate.$set["stats.lastActivity"] = now;
+      dbUpdate.$inc['stats.messages'] = 1;
+      dbUpdate.$set['stats.lastMessage'] = now;
+      dbUpdate.$set['stats.lastActivity'] = now;
     }
 
-    const updatedUser = await User.findOneAndUpdate(
-      { userId, guildId },
-      dbUpdate,
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
+    const updatedUser = await User.findOneAndUpdate({ userId, guildId }, dbUpdate, {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    });
 
-    if (!updatedUser)
-      throw new Error("Utilisateur non trouvé pour la mise à jour");
+    if (!updatedUser) throw new Error('Utilisateur non trouvé pour la mise à jour');
     return updatedUser;
   }
 
-  /** Récupère tous les membres d'un serveur */
   async getGuildMembers(guildId) {
     return await User.find({ guildId });
   }
 
-  /** Synchronise tous les membres Discord avec la base */
   async syncGuildMembers(guild) {
-    console.log(
-      `🔄 Synchronisation des membres du serveur: ${guild.name} (${guild.id})`
-    );
+    logger.info(`🔄 Synchronisation des membres du serveur: ${guild.name} (${guild.id})`);
     const members = await guild.members.fetch();
     const memberArray = Array.from(members.values());
     let syncedCount = 0;
@@ -181,20 +200,19 @@ class Database {
       if (operations.length > 0) {
         await User.bulkWrite(operations, { ordered: false });
         syncedCount += operations.length;
-        console.log(`🔄 Lot traité: ${syncedCount}/${memberArray.length}`);
+        logger.debug(`🔄 Lot traité: ${syncedCount}/${memberArray.length}`);
       }
     }
 
-    console.log(`✅ Synchronisation terminée pour: ${guild.name}`);
+    logger.info(`✅ Synchronisation terminée pour: ${guild.name}`);
     return { total: memberArray.length, synced: syncedCount };
   }
 
-  /** Ferme la connexion MongoDB */
   async close() {
     if (this.isConnected) {
       await mongoose.connection.close();
       this.isConnected = false;
-      console.log("🔌 Déconnecté de MongoDB");
+      logger.info('🔌 Déconnecté de MongoDB');
     }
   }
 }

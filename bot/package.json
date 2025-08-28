@@ -5,14 +5,20 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "cross-env NODE_ENV=development nodemon index.js",
+    "dev": "cross-env NODE_ENV=development DISCORD_TOKEN=$npm_package_config_discordTokenDev CLIENT_ID=$npm_package_config_clientIdDev nodemon index.js",
     "prod": "cross-env NODE_ENV=production node index.js",
-    "deploy-commands-dev": "node deploy-commands-dev.js",
-    "deploy-commands-prod": "node deploy-commands-prod.js",
+    "deploy-commands-dev": "node deploy-commands.js --dev",
+    "deploy-commands-prod": "node deploy-commands.js --prod",
     "clean-global-commands": "node clean-global-commands.js",
     "clean-guild-commands": "node clean-guild-commands.js",
     "lint": "eslint . --ext .js",
     "format": "prettier --write \"**/*.js\""
+  },
+  "config": {
+    "discordTokenDev": "MTQxMDQwMzkzNTc0NzA1MTY0My5Gm5Z1.9zJ1zY1c1I1x1O1U1A1P1E1R1S1O1N1A1L1",
+    "clientIdDev": "1410403935747051643",
+    "discordTokenProd": "MTQwOTY4MDEyOTk4MjA3NTAxNC5Gm5Z1.9zJ1zY1c1I1x1O1U1A1P1E1R1S1O1N1A1L1",
+    "clientIdProd": "1409680129982075014"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

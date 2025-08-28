@@ -7,7 +7,12 @@ const path = require('node:path');
 const XP = require('./models/XP');
 
 class SunatiaBot extends Client {
-  constructor() {
+  constructor(options = {}) {
+    const { isDev = false, devGuildId = null } = options;
+
+    const token = isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
+    const appId = isDev ? process.env.CLIENT_ID_DEV : process.env.CLIENT_ID;
+
     super({
       intents: [
         GatewayIntentBits.Guilds,
@@ -21,22 +26,23 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: '🌞 Sunatia | v1.0.0 ⚡',
-            type: 4, // ✅ Custom type (discord.js traduit en "Custom Activity")
+            name: isDev ? '🌞 Sunatia DEV | v1.0.0 ⚡' : '🌞 Sunatia | v1.0.0 ⚡',
+            type: 4,
           },
         ],
       },
-      applicationId: process.env.CLIENT_ID,
-      messageCacheLifetime: 0,
-      messageSweepInterval: 0,
-      messageCacheMaxSize: 0,
+      applicationId: appId,
+      messageCacheLifetime: isDev ? 60 : 300,
+      messageSweepInterval: isDev ? 30 : 60,
+      messageCacheMaxSize: 100,
     });
 
+    this.isDev = isDev;
+    this.devGuildId = devGuildId;
     this.commands = new Collection();
     this.events = new Collection();
     this.cooldowns = new Collection();
-    this.interactionHandlers = { buttons: {} }; // Obligatoire pour les boutons
-
+    this.interactionHandlers = { buttons: {} };
     this.database = database;
     this.config = config;
   }
@@ -47,12 +53,14 @@ class SunatiaBot extends Client {
       await Migrations.runMigrations();
       await this.loadCommands();
       await this.loadEvents();
-      await this.login(this.config.discord.token);
+
+      const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
+      await this.login(token);
 
       this.initXPCache();
       this.registerLeaderboardButtons();
 
-      console.log('✅ Bot démarré et prêt.');
+      console.log(`✅ Bot démarré et prêt (${this.isDev ? 'DEV' : 'PROD'})`);
     } catch (error) {
       console.error('❌ Erreur lors du démarrage du bot:', error);
       process.exit(1);
@@ -130,15 +138,9 @@ class SunatiaBot extends Client {
   async shutdown() {
     console.log('\nArrêt du bot...');
     try {
-      // 1️⃣ Fermer le Change Stream XP
       if (XP.closeChangeStream) await XP.closeChangeStream();
-
-      // 2️⃣ Fermer la DB
       if (this.database && this.database.close) await this.database.close();
-
-      // 3️⃣ Déconnecter le client Discord
       if (this.isReady()) this.destroy();
-
       console.log('✅ Bot arrêté avec succès');
     } catch (error) {
       console.error("❌ Erreur lors de l'arrêt du bot:", error);

@@ -5,7 +5,7 @@ const User = require('../src/models/User'); // chemin vers ton modèle User
 
 // --- Connexion à MongoDB ---
 mongoose
-  .connect(process.env.MONGO_URI, {
+  .connect(process.env.MONGO_URI_DEV, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
@@ -78,4 +78,4 @@ client.once('ready', async () => {
 });
 
 // --- Login Discord ---
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN_DEV);
