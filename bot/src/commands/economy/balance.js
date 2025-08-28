@@ -1,68 +1,69 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const Currency = require('../../models/Currency');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const Coins = require('../../models/Coins');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('balance')
-    .setDescription('Affiche le solde d\'un utilisateur')
-    .addUserOption(option =>
+    .setDescription('Voir ton solde ou celui d’un autre utilisateur')
+    .addUserOption((option) =>
       option
         .setName('utilisateur')
-        .setDescription('L\'utilisateur dont vous voulez voir le solde')
+        .setDescription('L’utilisateur dont tu veux voir le solde')
         .setRequired(false)
     ),
 
   async execute(interaction) {
+    // Déférer la réponse pour éviter expiration
+    try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch {
+      console.warn('⚠️ deferReply échoué (interaction expirée ?) Unknown interaction');
+    }
+
     try {
       const targetUser = interaction.options.getUser('utilisateur') || interaction.user;
-      const guildId = interaction.guild.id;
 
-      if (targetUser.bot) {
-        return interaction.reply({
-          content: '❌ Les bots ne peuvent pas avoir de solde.',
-          ephemeral: true
+      // Chercher ou créer l'utilisateur
+      let userCoins = await Coins.findOne({ userId: targetUser.id, guildId: interaction.guild.id });
+      if (!userCoins) {
+        userCoins = new Coins({
+          userId: targetUser.id,
+          guildId: interaction.guild.id,
+          balance: 0,
+          lastDaily: null,
         });
+        await userCoins.save();
       }
 
-      const userCurrency = await Currency.getUser(targetUser.id, guildId);
-      
+      // Créer l'embed
       const embed = new EmbedBuilder()
-        .setColor('#2ecc71')
+        .setColor('#FFD700')
         .setTitle(`💰 Solde de ${targetUser.username}`)
-        .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
-          { name: 'Solde actuel', value: `${userCurrency.balance} <:coin:1240070496038350919>`, inline: true },
-          { name: 'Dernière récompense quotidienne', 
-            value: userCurrency.lastDaily 
-              ? `<t:${Math.floor(userCurrency.lastDaily.getTime() / 1000)}:R>` 
-              : 'Jamais',
-            inline: true 
+          {
+            name: '💰 Pièces',
+            value: `${userCoins.balance.toLocaleString()} pièces`,
+            inline: true,
+          },
+          {
+            name: '✨ Total gagné',
+            value: `${userCoins.totalEarned.toLocaleString()} pièces`,
+            inline: true,
           }
         )
-        .setFooter({ text: `Demandé par ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setFooter({ text: 'Utilise /daily pour réclamer ta récompense quotidienne !' })
         .setTimestamp();
 
-      // Vérifier si l'interaction a déjà été répondue
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply({ embeds: [embed] });
-      } else {
-        return await interaction.reply({ embeds: [embed] });
-      }
-
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('Erreur lors de la récupération du solde :', error);
-      
-      // Vérifier si l'interaction a déjà été répondue
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply({
-          content: '❌ Une erreur est survenue lors de la récupération du solde.',
-          ephemeral: true
+      console.error('❌ Erreur balance:', error);
+      try {
+        return interaction.editReply({
+          content: '❌ Une erreur est survenue. Réessaie plus tard.',
         });
-      } else {
-        return await interaction.reply({
-          content: '❌ Une erreur est survenue lors de la récupération du solde.',
-          ephemeral: true
-        });
+      } catch {
+        if (interaction.channel)
+          interaction.channel.send('❌ Une erreur est survenue avec la commande balance.');
       }
     }
   },

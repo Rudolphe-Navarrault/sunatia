@@ -1,184 +1,136 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const Currency = require('../../models/Currency');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const Coins = require('../../models/Coins');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('admin-money')
-    .setDescription('Gérez l\'argent des utilisateurs (Admin)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .setDMPermission(false)
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('add')
-        .setDescription('Ajoute de l\'argent à un utilisateur')
-        .addUserOption(option =>
-          option
-            .setName('utilisateur')
-            .setDescription('L\'utilisateur à qui ajouter de l\'argent')
-            .setRequired(true)
-        )
-        .addIntegerOption(option =>
-          option
-            .setName('montant')
-            .setDescription('Le montant à ajouter')
-            .setRequired(true)
-            .setMinValue(1)
-        )
-        .addStringOption(option =>
-          option
-            .setName('raison')
-            .setDescription('Raison de l\'ajout')
-            .setRequired(false)
+    .setDescription('Gérer l’argent d’un utilisateur (admin only)')
+    .addSubcommand((sub) =>
+      sub
+        .setName('give')
+        .setDescription('Donne de l’argent à un utilisateur')
+        .addUserOption((opt) => opt.setName('user').setDescription('Utilisateur').setRequired(true))
+        .addIntegerOption((opt) =>
+          opt.setName('amount').setDescription('Montant').setRequired(true)
         )
     )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('remove')
-        .setDescription('Retire de l\'argent à un utilisateur')
-        .addUserOption(option =>
-          option
-            .setName('utilisateur')
-            .setDescription('L\'utilisateur à qui retirer de l\'argent')
-            .setRequired(true)
-        )
-        .addIntegerOption(option =>
-          option
-            .setName('montant')
-            .setDescription('Le montant à retirer')
-            .setRequired(true)
-            .setMinValue(1)
-        )
-        .addStringOption(option =>
-          option
-            .setName('raison')
-            .setDescription('Raison du retrait')
-            .setRequired(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('take')
+        .setDescription('Retire de l’argent à un utilisateur')
+        .addUserOption((opt) => opt.setName('user').setDescription('Utilisateur').setRequired(true))
+        .addIntegerOption((opt) =>
+          opt.setName('amount').setDescription('Montant').setRequired(true)
         )
     )
-    .addSubcommand(subcommand =>
-      subcommand
+    .addSubcommand((sub) =>
+      sub
+        .setName('reset')
+        .setDescription('Remet le solde de l’utilisateur à 0')
+        .addUserOption((opt) => opt.setName('user').setDescription('Utilisateur').setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName('set')
-        .setDescription('Définit le solde d\'un utilisateur')
-        .addUserOption(option =>
-          option
-            .setName('utilisateur')
-            .setDescription('L\'utilisateur dont vous voulez définir le solde')
-            .setRequired(true)
-        )
-        .addIntegerOption(option =>
-          option
-            .setName('montant')
-            .setDescription('Le nouveau solde')
-            .setRequired(true)
-            .setMinValue(0)
-        )
-        .addStringOption(option =>
-          option
-            .setName('raison')
-            .setDescription('Raison de la modification')
-            .setRequired(false)
+        .setDescription('Définir le solde exact d’un utilisateur')
+        .addUserOption((opt) => opt.setName('user').setDescription('Utilisateur').setRequired(true))
+        .addIntegerOption((opt) =>
+          opt.setName('amount').setDescription('Montant à définir').setRequired(true)
         )
     ),
 
   async execute(interaction) {
-    const subcommand = interaction.options.getSubcommand();
-    const targetUser = interaction.options.getUser('utilisateur');
-    const amount = interaction.options.getInteger('montant');
-    const reason = interaction.options.getString('raison') || 'Aucune raison fournie';
-    const guildId = interaction.guild.id;
-
-    if (targetUser.bot) {
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply({
-          content: '❌ Les bots ne peuvent pas avoir de solde.',
-          embeds: []
-        });
-      } else {
-        return await interaction.reply({
-          content: '❌ Les bots ne peuvent pas avoir de solde.',
-          ephemeral: true
-        });
-      }
+    if (!interaction.member.permissions.has('Administrator')) {
+      return interaction.reply({
+        content: '❌ Vous n’avez pas la permission d’utiliser cette commande.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
+    const sub = interaction.options.getSubcommand();
+    const target = interaction.options.getUser('user');
+
     try {
-      const userCurrency = await Currency.getUser(targetUser.id, guildId);
-      let newBalance;
-      let action;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      switch (subcommand) {
-        case 'add':
-          await userCurrency.addMoney(amount);
-          newBalance = userCurrency.balance;
-          action = 'ajouté';
-          break;
+      // Récupérer ou créer le compte
+      let user = await Coins.findOrCreate({ userId: target.id, guildId: interaction.guild.id });
 
-        case 'remove':
-          await userCurrency.removeMoney(amount);
-          newBalance = userCurrency.balance;
-          action = 'retiré';
-          break;
+      let embed = new EmbedBuilder().setTimestamp();
 
-        case 'set':
-          userCurrency.balance = amount;
-          await userCurrency.save();
-          newBalance = amount;
-          action = 'défini';
-          break;
+      if (sub === 'give') {
+        const amount = interaction.options.getInteger('amount');
+        if (amount <= 0)
+          return interaction.editReply({ content: '❌ Le montant doit être supérieur à 0.' });
 
-        default:
-          if (interaction.deferred || interaction.replied) {
-            return await interaction.editReply({
-              content: '❌ Sous-commande non reconnue.',
-              embeds: []
-            });
-          } else {
-            return await interaction.reply({
-              content: '❌ Sous-commande non reconnue.',
-              ephemeral: true
-            });
-          }
+        user.balance += amount;
+        user.totalEarned += amount;
+        await user.save();
+
+        embed
+          .setColor('#57F287')
+          .setTitle('💰 Argent donné')
+          .setDescription(
+            `${amount.toLocaleString()} pièces ont été ajoutées à ${target.username}.`
+          )
+          .addFields(
+            { name: '💰 Nouveau solde', value: `${user.balance.toLocaleString()} pièces` },
+            { name: '✨ Total gagné', value: `${user.totalEarned.toLocaleString()} pièces` }
+          );
+      } else if (sub === 'take') {
+        const amount = interaction.options.getInteger('amount');
+        if (amount <= 0)
+          return interaction.editReply({ content: '❌ Le montant doit être supérieur à 0.' });
+
+        user.balance = Math.max(0, user.balance - amount);
+        await user.save();
+
+        embed
+          .setColor('#FF0000')
+          .setTitle('💸 Argent retiré')
+          .setDescription(
+            `${amount.toLocaleString()} pièces ont été retirées à ${target.username}.`
+          )
+          .addFields({
+            name: '💰 Nouveau solde',
+            value: `${user.balance.toLocaleString()} pièces`,
+          });
+      } else if (sub === 'reset') {
+        user.balance = 0;
+        await user.save();
+
+        embed
+          .setColor('#FFA500')
+          .setTitle('♻️ Solde réinitialisé')
+          .setDescription(`Le solde de ${target.username} a été remis à 0.`)
+          .addFields({
+            name: '💰 Nouveau solde',
+            value: `${user.balance.toLocaleString()} pièces`,
+          });
+      } else if (sub === 'set') {
+        const amount = interaction.options.getInteger('amount');
+        if (amount < 0)
+          return interaction.editReply({ content: '❌ Le montant doit être positif.' });
+
+        user.balance = amount;
+        await user.save();
+
+        embed
+          .setColor('#1E90FF')
+          .setTitle('🛠️ Solde défini')
+          .setDescription(
+            `Le solde de ${target.username} a été défini à ${amount.toLocaleString()} pièces.`
+          )
+          .addFields({
+            name: '💰 Nouveau solde',
+            value: `${user.balance.toLocaleString()} pièces`,
+          });
       }
 
-      const embed = new EmbedBuilder()
-        .setColor('#2ecc71')
-        .setTitle(`✅ Opération réussie`)
-        .addFields(
-          { name: 'Action', value: `**${action}** ${amount} <:coin:1240070496038350919>` },
-          { name: 'Utilisateur', value: `${targetUser.tag} (${targetUser.id})` },
-          { name: 'Nouveau solde', value: `${newBalance} <:coin:1240070496038350919>` },
-          { name: 'Raison', value: reason }
-        )
-        .setFooter({ 
-          text: `Action effectuée par ${interaction.user.tag}`,
-          iconURL: interaction.user.displayAvatarURL()
-        })
-        .setTimestamp();
-
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ embeds: [embed] });
-      } else {
-        await interaction.reply({ embeds: [embed] });
-      }
-
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error(`Erreur lors de l'opération admin-money (${subcommand}):`, error);
-      
-      const errorMessage = error.message === 'Fonds insuffisants' 
-        ? '❌ L\'utilisateur n\'a pas assez d\'argent pour effectuer cette opération.'
-        : `❌ Une erreur est survenue lors de l'opération: ${error.message}`;
-
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          content: errorMessage,
-          embeds: []
-        });
-      } else {
-        await interaction.reply({
-          content: errorMessage,
-          ephemeral: true
-        });
-      }
+      console.error('❌ Erreur admin-money:', error);
+      return interaction.editReply({ content: '❌ Une erreur est survenue.' });
     }
   },
 };

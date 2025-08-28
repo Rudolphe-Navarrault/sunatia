@@ -120,6 +120,7 @@ class SunatiaBot extends Client {
     const leaderboardCmd = this.commands.get('leaderboard');
     if (!leaderboardCmd) return;
 
+    // Gestionnaire pour les boutons du leaderboard
     this.interactionHandlers.buttons['leaderboard'] = async (interaction, action, page) => {
       let newPage = parseInt(page) || 1;
       let forceRefresh = false;
@@ -129,9 +130,39 @@ class SunatiaBot extends Client {
       if (action === 'refresh') forceRefresh = true;
 
       if (leaderboardCmd.displayLeaderboard)
-        await leaderboardCmd.displayLeaderboard(interaction, newPage, true, forceRefresh);
+        await leaderboardCmd.displayLeaderboard(interaction, 'money', newPage, forceRefresh);
       else
-        await interaction.reply({ content: '❌ Handler leaderboard introuvable', ephemeral: true });
+        await interaction.reply({ content: '❌ Handler leaderboard introuvable', flags: 1 << 6 });
+    };
+
+    // Gestionnaire pour les boutons de pagination directe
+    this.interactionHandlers.buttons['page'] = async (interaction, type, page) => {
+      const newPage = parseInt(page) || 1;
+      const leaderboardCmd = this.commands.get('leaderboard');
+      
+      if (leaderboardCmd?.displayLeaderboard) {
+        await leaderboardCmd.displayLeaderboard(interaction, type, newPage, false);
+      } else {
+        await interaction.reply({ 
+          content: '❌ Impossible de charger le classement. Veuillez réessayer.',
+          flags: 1 << 6 
+        });
+      }
+    };
+
+    // Gestionnaire pour le bouton de rafraîchissement
+    this.interactionHandlers.buttons['refresh'] = async (interaction, type, page) => {
+      const newPage = parseInt(page) || 1;
+      const leaderboardCmd = this.commands.get('leaderboard');
+      
+      if (leaderboardCmd?.displayLeaderboard) {
+        await leaderboardCmd.displayLeaderboard(interaction, type, newPage, true);
+      } else {
+        await interaction.reply({ 
+          content: '❌ Impossible de rafraîchir le classement. Veuillez réessayer.',
+          flags: 1 << 6 
+        });
+      }
     };
   }
 

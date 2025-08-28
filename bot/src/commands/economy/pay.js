@@ -1,137 +1,83 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const Currency = require('../../models/Currency');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const Coins = require('../../models/Coins');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('pay')
-    .setDescription('Envoyer de l\'argent à un autre utilisateur')
-    .addUserOption(option =>
-      option
-        .setName('utilisateur')
-        .setDescription('L\'utilisateur à qui envoyer de l\'argent')
-        .setRequired(true)
+    .setDescription('Paye un autre utilisateur avec tes pièces !')
+    .addUserOption((option) =>
+      option.setName('user').setDescription('L’utilisateur à payer').setRequired(true)
     )
-    .addIntegerOption(option =>
-      option
-        .setName('montant')
-        .setDescription('Le montant à envoyer')
-        .setRequired(true)
-        .setMinValue(1)
+    .addIntegerOption((option) =>
+      option.setName('amount').setDescription('Montant à payer').setRequired(true)
     ),
 
   async execute(interaction) {
-    const targetUser = interaction.options.getUser('utilisateur');
-    const amount = interaction.options.getInteger('montant');
-    const guildId = interaction.guild.id;
-
-    // Vérifications de base
-    if (targetUser.bot) {
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply({
-          content: '❌ Vous ne pouvez pas envoyer d\'argent à un bot.',
-          embeds: []
-        });
-      } else {
-        return await interaction.reply({
-          content: '❌ Vous ne pouvez pas envoyer d\'argent à un bot.',
-          ephemeral: true
-        });
-      }
+    try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch {
+      console.warn('⚠️ deferReply échoué (interaction expirée ?) Unknown interaction');
     }
 
-    if (targetUser.id === interaction.user.id) {
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply({
-          content: '❌ Vous ne pouvez pas vous envoyer de l\'argent à vous-même.',
-          embeds: []
-        });
-      } else {
-        return await interaction.reply({
-          content: '❌ Vous ne pouvez pas vous envoyer de l\'argent à vous-même.',
-          ephemeral: true
-        });
-      }
+    const payer = interaction.user;
+    const receiver = interaction.options.getUser('user');
+    const amount = interaction.options.getInteger('amount');
+
+    if (receiver.id === payer.id) {
+      return interaction.editReply({ content: '❌ Tu ne peux pas te payer toi-même !' });
+    }
+
+    if (amount <= 0) {
+      return interaction.editReply({ content: '❌ Le montant doit être supérieur à 0.' });
     }
 
     try {
-      // Récupérer les soldes des deux utilisateurs
-      const [sender, receiver] = await Promise.all([
-        Currency.getUser(interaction.user.id, guildId),
-        Currency.getUser(targetUser.id, guildId)
-      ]);
-
-      // Vérifier que l'expéditeur a assez d'argent
-      if (sender.balance < amount) {
-        if (interaction.deferred || interaction.replied) {
-          return await interaction.editReply({
-            content: `❌ Vous n'avez pas assez d'argent pour effectuer ce virement. Solde actuel: ${sender.balance} <:coin:1240070496038350919>`,
-            embeds: []
-          });
-        } else {
-          return await interaction.reply({
-            content: `❌ Vous n'avez pas assez d'argent pour effectuer ce virement. Solde actuel: ${sender.balance} <:coin:1240070496038350919>`,
-            ephemeral: true
-          });
-        }
+      // Récupérer ou créer le payer
+      let payerData = await Coins.findOrCreate({ userId: payer.id, guildId: interaction.guild.id });
+      if (payerData.balance < amount) {
+        return interaction.editReply({
+          content: '❌ Solde insuffisant pour effectuer le paiement.',
+        });
       }
 
-      // Effectuer le transfert
-      await sender.transferMoney(receiver, amount);
+      // Récupérer ou créer le receiver
+      let receiverData = await Coins.findOrCreate({
+        userId: receiver.id,
+        guildId: interaction.guild.id,
+      });
 
-      // Créer l'embed de confirmation
+      // Retirer de payer (sans toucher totalEarned)
+      payerData.balance -= amount;
+      await payerData.save();
+
+      // Ajouter au receiver (et ajouter au totalEarned)
+      receiverData.balance += amount;
+      receiverData.totalEarned += amount;
+      await receiverData.save();
+
+      // Embed pour confirmation
       const embed = new EmbedBuilder()
-        .setColor('#2ecc71')
-        .setTitle('💸 Virement effectué !')
-        .setDescription(`Vous avez envoyé **${amount}** <:coin:1240070496038350919> à ${targetUser.tag}`)
-        .addFields(
-          { name: 'Votre nouveau solde', value: `${sender.balance} <:coin:1240070496038350919>`, inline: true },
-          { name: 'Leur nouveau solde', value: `${receiver.balance} <:coin:1240070496038350919>`, inline: true }
+        .setColor('#FFA500')
+        .setTitle('💸 Paiement effectué !')
+        .setDescription(
+          `${payer.username} a payé **${amount.toLocaleString()}** pièces à ${receiver.username} !`
         )
-        .setFooter({ text: `Transaction effectuée par ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .addFields(
+          {
+            name: '💰 Nouveau solde',
+            value: `${payer.username} : ${payerData.balance.toLocaleString()} pièces\n${receiver.username} : ${receiverData.balance.toLocaleString()} pièces`,
+          },
+          {
+            name: '✨ Total gagné du receveur',
+            value: `${receiver.username} : ${receiverData.totalEarned.toLocaleString()} pièces`,
+          }
+        )
         .setTimestamp();
 
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ embeds: [embed] });
-      } else {
-        await interaction.reply({ embeds: [embed] });
-      }
-
-      // Envoyer un message privé au destinataire si possible
-      try {
-        await targetUser.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor('#2ecc71')
-              .setTitle('💸 Vous avez reçu de l\'argent !')
-              .setDescription(`Vous avez reçu **${amount}** <:coin:1240070496038350919> de ${interaction.user.tag}`)
-              .addFields([
-                { name: 'Nouveau solde', value: `${receiver.balance} <:coin:1240070496038350919>` }
-              ])
-              .setTimestamp()
-          ]
-        });
-      } catch (error) {
-        console.error(`Impossible d'envoyer un message à ${targetUser.tag}:`, error);
-      }
-
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('Erreur lors du virement :', error);
-      
-      const errorMessage = error.message === 'Fonds insuffisants' 
-        ? '❌ Vous n\'avez pas assez d\'argent pour effectuer ce virement.'
-        : '❌ Une erreur est survenue lors du virement.';
-
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          content: errorMessage,
-          embeds: []
-        });
-      } else {
-        await interaction.reply({
-          content: errorMessage,
-          ephemeral: true
-        });
-      }
+      console.error('❌ Erreur pay:', error);
+      return interaction.editReply({ content: '❌ Une erreur est survenue lors du paiement.' });
     }
   },
 };

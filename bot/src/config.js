@@ -27,8 +27,6 @@ module.exports = {
   mongo: {
     uri: isDev ? process.env.MONGO_URI_DEV : process.env.MONGO_URI,
     options: {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,

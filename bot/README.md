@@ -160,7 +160,7 @@ Get started by creating a new file or uploading an existing file. We recommend e
 …or create a new repository on the command line
 echo "# sunatia" >> README.md
 git init
-git add README.md
+git add README.md (or "." for all files)
 git commit -m "first commit"
 git branch -M main
 git remote add origin https://github.com/Rudolphe-Navarrault/sunatia.git

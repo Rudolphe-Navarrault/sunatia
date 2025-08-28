@@ -26,11 +26,28 @@ module.exports = {
       err,
       msg = "Une erreur est survenue lors du traitement de l'interaction."
     ) => {
+      // Ne pas logger les erreurs d'interaction déjà traitée ou expirée
+      if (err.code === 10062 || err.code === 40060) return;
+
       logger.error(msg, err);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: `❌ ${msg}`, ephemeral: true }).catch(() => {});
-      } else if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: `❌ ${msg}` }).catch(() => {});
+
+      try {
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: `❌ ${msg}`,
+            flags: 1 << 6,
+          });
+        } else if (interaction.deferred) {
+          await interaction.editReply({
+            content: `❌ ${msg}`,
+            flags: 1 << 6,
+          });
+        }
+      } catch (replyError) {
+        // Ne rien faire si l'échec est dû à une interaction déjà traitée
+        if (replyError.code !== 10062 && replyError.code !== 40060) {
+          logger.error("Échec de l'envoi du message d'erreur:", replyError);
+        }
       }
     };
 
@@ -56,24 +73,39 @@ module.exports = {
         const command = client.commands.get(interaction.commandName);
         if (!command) {
           logger.warn(`Commande inconnue: ${interaction.commandName}`);
-          return interaction
-            .reply({ content: "❌ Cette commande n'existe pas.", ephemeral: true })
-            .catch(() => {});
+          if (!interaction.replied && !interaction.deferred) {
+            return interaction
+              .reply({
+                content: "❌ Cette commande n'existe pas.",
+                flags: 1 << 6, // Éphémère
+              })
+              .catch(() => {});
+          }
+          return;
         }
 
         logger.info(`Commande "${interaction.commandName}" exécutée par ${interaction.user.tag}`);
 
-        if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferReply().catch(() => {});
-        }
-
+        // Ne pas différer ici, la commande s'en charge
         try {
           return await command.execute(interaction, client);
         } catch (err) {
-          return handleError(
-            err,
-            `Erreur lors de l'exécution de la commande "${interaction.commandName}"`
-          );
+          // Ignorer silencieusement si interaction déjà expirée
+          if (err.code === 10062 || err.code === 40060) {
+            logger.warn(`Interaction expirée ou déjà traitée pour ${interaction.commandName}`);
+            return;
+          }
+
+          logger.error(`Erreur dans la commande ${interaction.commandName}:`, err);
+
+          if (!interaction.replied && !interaction.deferred) {
+            return interaction
+              .reply({
+                content: `❌ Une erreur est survenue lors de l'exécution de la commande.`,
+                flags: 1 << 6,
+              })
+              .catch(() => {});
+          }
         }
       }
 
