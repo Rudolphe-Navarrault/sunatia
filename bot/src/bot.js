@@ -26,7 +26,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.1.0' : '⚡ Sunatia | v1.1.0',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.2.0' : '⚡ Sunatia | v1.2.0',
             type: 4,
           },
         ],
@@ -54,8 +54,21 @@ class SunatiaBot extends Client {
       await this.loadCommands();
       await this.loadEvents();
 
+      const { startBankCron } = require('./utils/bankCron');
+
+      // Enregistrer le handler des boutons help
+      const bankCmd = this.commands.get('bank');
+      if (bankCmd?.handleButton) {
+        this.interactionHandlers.buttons['help'] = async (interaction, action) => {
+          await bankCmd.handleButton(interaction);
+        };
+      }
+
       const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
       await this.login(token);
+
+      startBankCron();
+      console.log('📆 Cron bancaire activé');
 
       this.initXPCache();
       this.registerLeaderboardButtons();
@@ -120,7 +133,6 @@ class SunatiaBot extends Client {
     const leaderboardCmd = this.commands.get('leaderboard');
     if (!leaderboardCmd) return;
 
-    // Gestionnaire pour les boutons du leaderboard
     this.interactionHandlers.buttons['leaderboard'] = async (interaction, action, page) => {
       let newPage = parseInt(page) || 1;
       let forceRefresh = false;
@@ -135,11 +147,8 @@ class SunatiaBot extends Client {
         await interaction.reply({ content: '❌ Handler leaderboard introuvable', flags: 1 << 6 });
     };
 
-    // Gestionnaire pour les boutons de pagination directe
     this.interactionHandlers.buttons['page'] = async (interaction, type, page) => {
       const newPage = parseInt(page) || 1;
-      const leaderboardCmd = this.commands.get('leaderboard');
-
       if (leaderboardCmd?.displayLeaderboard) {
         await leaderboardCmd.displayLeaderboard(interaction, type, newPage, false);
       } else {
@@ -150,11 +159,8 @@ class SunatiaBot extends Client {
       }
     };
 
-    // Gestionnaire pour le bouton de rafraîchissement
     this.interactionHandlers.buttons['refresh'] = async (interaction, type, page) => {
       const newPage = parseInt(page) || 1;
-      const leaderboardCmd = this.commands.get('leaderboard');
-
       if (leaderboardCmd?.displayLeaderboard) {
         await leaderboardCmd.displayLeaderboard(interaction, type, newPage, true);
       } else {
