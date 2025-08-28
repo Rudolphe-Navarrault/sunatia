@@ -26,7 +26,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '🌞 Sunatia DEV | v1.0.0 ⚡' : '🌞 Sunatia | v1.0.0 ⚡',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.1.0' : '⚡ Sunatia | v1.1.0',
             type: 4,
           },
         ],
@@ -139,13 +139,13 @@ class SunatiaBot extends Client {
     this.interactionHandlers.buttons['page'] = async (interaction, type, page) => {
       const newPage = parseInt(page) || 1;
       const leaderboardCmd = this.commands.get('leaderboard');
-      
+
       if (leaderboardCmd?.displayLeaderboard) {
         await leaderboardCmd.displayLeaderboard(interaction, type, newPage, false);
       } else {
-        await interaction.reply({ 
+        await interaction.reply({
           content: '❌ Impossible de charger le classement. Veuillez réessayer.',
-          flags: 1 << 6 
+          flags: 1 << 6,
         });
       }
     };
@@ -154,13 +154,13 @@ class SunatiaBot extends Client {
     this.interactionHandlers.buttons['refresh'] = async (interaction, type, page) => {
       const newPage = parseInt(page) || 1;
       const leaderboardCmd = this.commands.get('leaderboard');
-      
+
       if (leaderboardCmd?.displayLeaderboard) {
         await leaderboardCmd.displayLeaderboard(interaction, type, newPage, true);
       } else {
-        await interaction.reply({ 
+        await interaction.reply({
           content: '❌ Impossible de rafraîchir le classement. Veuillez réessayer.',
-          flags: 1 << 6 
+          flags: 1 << 6,
         });
       }
     };
