@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const xpController = require('../../controllers/xpController');
 const User = require('../../models/User');
-const leaderboardCommand = require('./leaderboard'); // pour accéder au cache
+const leaderboardCommand = require('../economy/leaderboard'); // pour accéder au cache
 const logger = require('../../utils/logger');
 
 // --- Fonction utilitaire pour répondre en toute sécurité ---
