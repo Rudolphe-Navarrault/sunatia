@@ -53,6 +53,11 @@ class SunatiaBot extends Client {
       await Migrations.runMigrations();
       await this.loadCommands();
       await this.loadEvents();
+      
+      // Initialiser les salons de statistiques
+      const { initializeStatsChannels, setClient } = require('./commands/utilities/stats-vocal');
+      setClient(this); // Passer l'instance du client à stats-vocal.js
+      await initializeStatsChannels();
 
       const { startBankCron } = require('./utils/bankCron');
 

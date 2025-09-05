@@ -1,5 +1,6 @@
 const { Events, ChannelType, PermissionsBitField } = require('discord.js');
 const { GuildSettings } = require('../models/GuildSettings');
+const { statsChannels, updateMemberCount } = require('../commands/utilities/stats-vocal');
 
 module.exports = {
   name: Events.GuildMemberAdd,
@@ -31,6 +32,11 @@ module.exports = {
       }
 
       console.log(`✅ Membre enregistré: ${member.user.tag} (${member.id})`);
+
+      // Mettre à jour le compteur de membres si un salon de stats existe
+      if (statsChannels.has(member.guild.id)) {
+        updateMemberCount(member.guild);
+      }
     } catch (err) {
       console.error(`❌ Erreur lors de l'enregistrement du membre ${member.user.tag}:`, err);
     }

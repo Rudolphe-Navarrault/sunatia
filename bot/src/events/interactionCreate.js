@@ -52,19 +52,89 @@ module.exports = {
     };
 
     try {
-      // --- Gestion des boutons ---
-      if (interaction.isButton()) {
-        const [type, action, ...params] = interaction.customId.split('_');
-        const handler = client.interactionHandlers?.buttons?.[type];
-        if (handler) {
-          try {
-            return await handler(interaction, action, ...params);
-          } catch (err) {
-            return handleError(err, `Erreur lors du traitement du bouton "${type}"`);
+      // --- Gestion des composants d'interaction ---
+      if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        // Gestion des boutons et menus déroulants de la commande help
+        if (interaction.customId.startsWith('help_') || interaction.customId === 'help_category') {
+          // Ne pas traiter les interactions déjà répondues
+          if (interaction.replied || interaction.deferred) {
+            logger.debug('Interaction déjà traitée, ignorée:', interaction.id);
+            return;
           }
-        } else {
-          logger.warn(`Aucun handler pour le bouton de type "${type}"`);
+
+          try {
+            // Récupérer la commande help
+            const command = client.commands.get('help');
+            if (!command || !command.execute) {
+              logger.warn('Commande help non trouvée ou non exécutable');
+              return interaction.reply({ 
+                content: '❌ La commande d\'aide n\'est pas disponible pour le moment.', 
+                ephemeral: true 
+              }).catch(() => {});
+            }
+            
+            // Vérifier si l'interaction est toujours valide
+            if (!interaction.isMessageComponent()) {
+              return interaction.reply({ 
+                content: '❌ Cette interaction n\'est plus valide.', 
+                ephemeral: true 
+              }).catch(() => {});
+            }
+            
+            // Différer la réponse pour gérer l'interaction de manière asynchrone
+            try {
+              await interaction.deferUpdate();
+            } catch (deferError) {
+              // Si l'interaction a déjà été traitée, on l'ignore
+              if (deferError.code === 10062) return;
+              throw deferError;
+            }
+            
+            // Exécuter la commande help avec l'interaction
+            try {
+              await command.execute(interaction);
+            } catch (executeError) {
+              logger.error('Erreur lors de l\'exécution de la commande help:', executeError);
+              // Essayer d'envoyer un message d'erreur si possible
+              if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ 
+                  content: '❌ Une erreur est survenue lors du traitement de votre demande.', 
+                  ephemeral: true 
+                }).catch(() => {});
+              } else {
+                await interaction.editReply({ 
+                  content: '❌ Une erreur est survenue lors du traitement de votre demande.'
+                }).catch(() => {});
+              }
+            }
+            
+          } catch (error) {
+            logger.error('Erreur critique dans le gestionnaire d\'aide:', error);
+            // Ne pas propager l'erreur pour éviter les boucles infinies
+            if (!interaction.replied && !interaction.deferred) {
+              interaction.reply({ 
+                content: '❌ Une erreur critique est survenue.', 
+                ephemeral: true 
+              }).catch(() => {});
+            }
+          }
           return;
+        }
+        
+        // Gestion des autres boutons personnalisés
+        if (interaction.isButton()) {
+          const [type, action, ...params] = interaction.customId.split('_');
+          const handler = client.interactionHandlers?.buttons?.[type];
+          if (handler) {
+            try {
+              return await handler(interaction, action, ...params);
+            } catch (err) {
+              return handleError(err, `Erreur lors du traitement du bouton "${type}"`);
+            }
+          } else {
+            logger.warn(`Aucun handler pour le bouton de type "${type}"`);
+            return;
+          }
         }
       }
 
