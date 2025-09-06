@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { createStatsChannel } = require('./stats-vocal');
+const { createStatsChannel } = require('../../utils/stats-vocal');
 
 module.exports = {
   data: new SlashCommandBuilder()

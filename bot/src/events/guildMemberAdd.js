@@ -1,6 +1,6 @@
 const { Events, ChannelType, PermissionsBitField } = require('discord.js');
 const { GuildSettings } = require('../models/GuildSettings');
-const { statsChannels, updateMemberCount } = require('../commands/utilities/stats-vocal');
+const { statsChannels, updateMemberCount } = require('../utils/stats-vocal');
 
 module.exports = {
   name: Events.GuildMemberAdd,

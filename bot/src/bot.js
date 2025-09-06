@@ -26,7 +26,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.2.0' : '⚡ Sunatia | v1.2.0',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.3.1' : '⚡ Sunatia | v1.3.1',
             type: 4,
           },
         ],
@@ -53,9 +53,9 @@ class SunatiaBot extends Client {
       await Migrations.runMigrations();
       await this.loadCommands();
       await this.loadEvents();
-      
+
       // Initialiser les salons de statistiques
-      const { initializeStatsChannels, setClient } = require('./commands/utilities/stats-vocal');
+      const { initializeStatsChannels, setClient } = require('./utils/stats-vocal');
       setClient(this); // Passer l'instance du client à stats-vocal.js
       await initializeStatsChannels();
 
