@@ -219,6 +219,8 @@ exports.createStatsChannel = async function(guild, channelName = `👥 Membres: 
         
         if (cachedChannel) {
           logger.log(`✅ Salon trouvé dans le cache: #${cachedChannel.name} (${cachedChannel.id})`);
+          // Mettre à jour le compteur avant de retourner
+          await updateMemberCount(guild);
           return { 
             success: false, 
             message: `❌ Un salon de statistiques existe déjà : ${cachedChannel}`
@@ -226,6 +228,11 @@ exports.createStatsChannel = async function(guild, channelName = `👥 Membres: 
         } else {
           logger.log(`ℹ️ Le salon ${cachedChannelId} du cache n'existe plus, nettoyage...`);
           statsChannels.delete(guild.id);
+          // Nettoyer aussi la base de données
+          await GuildSettings.updateOne(
+            { guildId: guild.id },
+            { $unset: { statsChannelId: 1 } }
+          );
         }
       } catch (error) {
         logger.error('❌ Erreur lors de la vérification du salon en cache:', error);
@@ -246,6 +253,8 @@ exports.createStatsChannel = async function(guild, channelName = `👥 Membres: 
           logger.log(`✅ Salon trouvé dans la base de données: #${dbChannel.name} (${dbChannel.id})`);
           // Mettre à jour le cache
           statsChannels.set(guild.id, dbChannel.id);
+          // Mettre à jour le compteur avant de retourner
+          await updateMemberCount(guild);
           return { 
             success: false, 
             message: `❌ Un salon de statistiques existe déjà : ${dbChannel}`
@@ -265,8 +274,15 @@ exports.createStatsChannel = async function(guild, channelName = `👥 Membres: 
 
     // Vérifier s'il existe déjà un salon de statistiques dans les salons existants
     logger.log('\n🔍 Vérification des salons vocaux existants...');
-    const existingVoiceChannels = guild.channels.cache.filter(
-      c => c.type === ChannelType.GuildVoice && c.name.startsWith('👥 Membres:')
+    
+    // Récupérer TOUS les salons vocaux, pas seulement ceux en cache
+    const allVoiceChannels = await guild.channels.fetch().then(channels => 
+      channels.filter(c => c.type === ChannelType.GuildVoice)
+    );
+    
+    // Vérifier s'il y a déjà un salon de statistiques
+    const existingVoiceChannels = allVoiceChannels.filter(
+      c => c.name.startsWith('👥 Membres:') || c.name.startsWith('Membres:')
     );
 
     if (existingVoiceChannels.size > 0) {
