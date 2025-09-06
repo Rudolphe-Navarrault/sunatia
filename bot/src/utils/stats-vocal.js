@@ -17,60 +17,43 @@ const statsChannels = new Map();
 
 // Mettre à jour le compteur de membres
 async function updateMemberCount(guild) {
-  console.log('\n' + '='.repeat(80));
-  console.log(`[${new Date().toISOString()}] 🔄 DÉBUT updateMemberCount`);
-  console.log(`🏠 Serveur: ${guild.name} (${guild.id})`);
-  console.log(`👥 Nombre total de membres: ${guild.memberCount}`);
+  const logger = console;
+  logger.log('\n' + '='.repeat(80));
+  logger.log(`[${new Date().toISOString()}] 🔄 DÉBUT updateMemberCount`);
+  logger.log(`🏠 Serveur: ${guild.name} (${guild.id})`);
   
   try {
-    // Vérifier d'abord dans le cache
+    // 1. Vérifier si le bot a les permissions nécessaires
+    const me = await guild.members.fetchMe();
+    if (!me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      logger.error('❌ Le bot n\'a pas la permission de gérer les salons');
+      return;
+    }
+
+    // 2. Récupérer l'ID du salon depuis le cache ou la base de données
     let channelId = statsChannels.get(guild.id);
-    console.log(`🔍 Cache statsChannels:`, statsChannels);
-    console.log(`📌 ID du salon en cache: ${channelId || 'Aucun'}`);
-    
-    // Si pas dans le cache, vérifier dans GuildSettings
     if (!channelId) {
-      console.log('ℹ️ Salon non trouvé dans le cache, vérification dans GuildSettings...');
+      logger.log('ℹ️ Salon non trouvé dans le cache, vérification dans la base de données...');
       const guildSettings = await GuildSettings.findOne({ guildId: guild.id });
-      console.log(`📊 Résultat de la recherche GuildSettings:`, guildSettings ? `Trouvé (statsChannelId: ${guildSettings.statsChannelId})` : 'Non trouvé');
-      
       if (guildSettings?.statsChannelId) {
         channelId = guildSettings.statsChannelId;
-        statsChannels.set(guild.id, channelId); // Mettre en cache
-        console.log(`✅ Salon chargé depuis GuildSettings et mis en cache: ${channelId}`);
+        statsChannels.set(guild.id, channelId);
+        logger.log(`✅ Salon chargé depuis la base de données: ${channelId}`);
       } else {
-        console.log(`❌ Aucun salon de statistiques trouvé pour le serveur: ${guild.name}`);
+        logger.log('ℹ️ Aucun salon de statistiques configuré pour ce serveur');
         return;
       }
     }
-    
-    console.log(`✅ Salon de statistiques trouvé: ${channelId}`);
 
-    // Récupérer le salon
-    console.log(`🔄 Récupération du salon depuis le cache...`);
-    let channel = guild.channels.cache.get(channelId);
-    
-    // Si le salon n'est pas dans le cache, essayer de le récupérer
-    if (!channel) {
-      try {
-        console.log(`ℹ️ Salon ${channelId} non trouvé dans le cache, tentative de récupération...`);
-        channel = await guild.channels.fetch(channelId);
-        console.log(`✅ Salon récupéré avec succès:`, channel ? `#${channel.name} (${channel.id})` : 'Non trouvé');
-      } catch (fetchError) {
-        console.error('❌ Erreur lors de la récupération du salon:', fetchError);
-        console.error('Détails de l\'erreur:', {
-          code: fetchError.code,
-          message: fetchError.message,
-          stack: fetchError.stack
-        });
-      }
-    } else {
-      console.log(`✅ Salon trouvé dans le cache: #${channel.name} (${channel.id})`);
-    }
-    
-    // Si le salon n'existe toujours pas, nettoyer
-    if (!channel) {
-      console.log(`❌ Le salon ${channelId} n'existe plus, nettoyage...`);
+    // 3. Récupérer le salon
+    let channel;
+    try {
+      channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+      if (!channel) throw new Error('Salon non trouvé');
+      logger.log(`✅ Salon trouvé: #${channel.name} (${channel.id})`);
+    } catch (error) {
+      logger.error(`❌ Erreur lors de la récupération du salon ${channelId}:`, error);
+      // Nettoyer le cache si le salon n'existe plus
       statsChannels.delete(guild.id);
       await GuildSettings.updateOne(
         { guildId: guild.id },
@@ -79,68 +62,52 @@ async function updateMemberCount(guild) {
       return;
     }
 
-    // Compter les membres non-bots
+    // 4. Compter les membres non-bots
     let memberCount;
     try {
-      console.log(`🔢 Début du comptage des membres...`);
-      console.log(`📊 Taille du cache: ${guild.members.cache.size}, Nombre total de membres: ${guild.memberCount}`);
+      // Utiliser directement la propriété memberCount du serveur pour éviter les problèmes de cache
+      // et économiser des appels API inutiles
+      memberCount = guild.memberCount;
       
-      // Forcer un rafraîchissement du cache des membres si nécessaire
-      if (guild.members.cache.size < guild.memberCount) {
-        console.log('🔄 Rafraîchissement du cache des membres...');
-        await guild.members.fetch();
-        console.log(`✅ Cache rafraîchi. Nouvelle taille: ${guild.members.cache.size}`);
-      }
+      // Si vous voulez vraiment compter les non-bots (attention aux limites d'API)
+      // const members = await guild.members.fetch();
+      // memberCount = members.filter(m => !m.user.bot).size;
       
-      // Compter les membres non-bots
-      const allMembers = guild.members.cache;
-      const nonBotMembers = allMembers.filter(member => !member.user.bot);
-      memberCount = nonBotMembers.size;
-      
-      console.log(`👥 Détail du comptage:`);
-      console.log(`- Total membres: ${allMembers.size}`);
-      console.log(`- Bots: ${allMembers.size - nonBotMembers.size}`);
-      console.log(`- Membres non-bots: ${memberCount}`);
-      
-    } catch (err) {
-      console.error('⚠️ Erreur lors du comptage des membres:', err);
+      logger.log(`👥 Nombre total de membres: ${memberCount}`);
+    } catch (error) {
+      logger.error('⚠️ Erreur lors du comptage des membres:', error);
       memberCount = guild.memberCount; // Utiliser le compte total en cas d'erreur
-      console.log(`⚠️ Utilisation du nombre total de membres: ${memberCount}`);
     }
 
-    // Mettre à jour le nom du salon si nécessaire
+    // 5. Mettre à jour le nom du salon
     const newName = `👥 Membres: ${memberCount}`;
-    console.log(`\n📝 Vérification de la nécessité de mise à jour du nom:`);
-    console.log(`- Nom actuel: "${channel.name}"`);
-    console.log(`- Nouveau nom proposé: "${newName}"`);
     
-    if (channel.name !== newName) {
-      console.log(`🔄 Mise à jour nécessaire, tentative de modification...`);
-      try {
-        console.log(`🔧 Tentative de modification du nom du salon...`);
-        await channel.setName(newName, `Mise à jour du nombre de membres (${memberCount})`);
-        console.log('✅ Nom du salon mis à jour avec succès!');
-        console.log(`✅ Vérification après mise à jour: "${channel.name}"`);
-      } catch (err) {
-        console.error('❌ Erreur lors de la mise à jour du nom:', err);
-        console.error('Détails de l\'erreur:', {
-          code: err.code,
-          message: err.message,
-          permissions: channel.permissionsFor(guild.members.me).toArray()
-        });
-        
-        if (err.code === 50013) {
-          console.log('⚠️ Permission refusée pour modifier le salon. Vérifiez les permissions du bot.');
-          console.log('Permissions actuelles du bot:', channel.permissionsFor(guild.members.me).toArray());
-        } else if (err.code === 30034) {
-          console.log('⚠️ Trop de requêtes. Réessayez plus tard.');
-        }
+    // Vérifier si une mise à jour est nécessaire
+    if (channel.name === newName) {
+      logger.log('ℹ️ Le nom du salon est déjà à jour');
+      return;
+    }
+
+    logger.log(`🔄 Mise à jour du nom: "${channel.name}" → "${newName}"`);
+    
+    try {
+      await channel.setName(newName, `Mise à jour du nombre de membres (${new Date().toISOString()})`);
+      logger.log('✅ Nom du salon mis à jour avec succès');
+    } catch (error) {
+      logger.error('❌ Erreur lors de la mise à jour du nom:', {
+        code: error.code,
+        message: error.message,
+        permissions: channel.permissionsFor(me).toArray()
+      });
+      
+      // Nettoyer le cache si le salon n'existe plus ou si le bot n'a plus accès
+      if (['Unknown Channel', 'Missing Access', 'Missing Permissions'].includes(error.message)) {
+        logger.log('⚠️ Suppression du salon du cache');
+        statsChannels.delete(guild.id);
       }
-    } else {
-      console.log('ℹ️ Le nom du salon est déjà à jour, aucune action nécessaire');
     }
   } catch (error) {
-    console.error('❌ Erreur lors de la mise à jour du compteur de membres:', error);
+    logger.error('❌ Erreur critique dans updateMemberCount:', error);
   }
 }
 
@@ -213,84 +180,139 @@ exports.initializeStatsChannels = async function() {
 // Créer un nouveau salon de statistiques
 exports.createStatsChannel = async function(guild, channelName = `👥 Membres: ${guild.memberCount}`) {
   try {
-    console.log(`🔍 Vérification d'un salon existant pour le serveur: ${guild.name} (${guild.id})`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[${new Date().toISOString()}] 🔍 VÉRIFICATION DES SALONS EXISTANTS`);
+    console.log(`🏠 Serveur: ${guild.name} (${guild.id})`);
     
-    // Vérifier si un salon existe déjà dans le cache
+    // 1. Vérifier d'abord dans le cache
     const existingChannelId = statsChannels.get(guild.id);
     if (existingChannelId) {
-      const existingChannel = guild.channels.cache.get(existingChannelId);
-      if (existingChannel) {
-        console.log(`ℹ️ Salon existant trouvé dans le cache: ${existingChannel.name} (${existingChannel.id})`);
-        return { 
-          success: false, 
-          message: `Un salon de statistiques existe déjà : ${existingChannel}` 
-        };
-      } else {
-        // Nettoyer le cache si le salon n'existe plus
+      try {
+        // Essayer de récupérer le salon depuis le cache ou l'API
+        const existingChannel = guild.channels.cache.get(existingChannelId) || 
+                              await guild.channels.fetch(existingChannelId).catch(() => null);
+        
+        if (existingChannel) {
+          console.log(`✅ Salon existant trouvé: #${existingChannel.name} (${existingChannel.id})`);
+          return { 
+            success: false, 
+            message: `❌ Un salon de statistiques existe déjà : ${existingChannel}` 
+          };
+        } else {
+          console.log(`ℹ️ Le salon ${existingChannelId} du cache n'existe plus, nettoyage...`);
+          statsChannels.delete(guild.id);
+        }
+      } catch (error) {
+        console.error('❌ Erreur lors de la vérification du salon en cache:', error);
         statsChannels.delete(guild.id);
       }
     }
 
-    // Vérifier dans GuildSettings
+    // 2. Vérifier dans GuildSettings
+    console.log(`\n🔍 Vérification dans la base de données...`);
     const guildSettings = await GuildSettings.findOne({ guildId: guild.id });
+    
     if (guildSettings?.statsChannelId) {
-      const channel = guild.channels.cache.get(guildSettings.statsChannelId);
-      if (channel) {
-        console.log(`ℹ️ Salon existant trouvé dans GuildSettings: ${channel.name} (${channel.id})`);
-        statsChannels.set(guild.id, channel.id);
-        return { 
-          success: false, 
-          message: `Un salon de statistiques existe déjà : ${channel}` 
-        };
-      } else {
-        // Mettre à jour GuildSettings si le salon n'existe plus
-        await GuildSettings.updateOne(
-          { guildId: guild.id },
-          { $set: { statsChannelId: null } }
-        );
+      try {
+        // Essayer de récupérer le salon depuis le cache ou l'API
+        const existingChannel = guild.channels.cache.get(guildSettings.statsChannelId) || 
+                              await guild.channels.fetch(guildSettings.statsChannelId).catch(() => null);
+        
+        if (existingChannel) {
+          console.log(`✅ Salon existant trouvé dans la base de données: #${existingChannel.name} (${existingChannel.id})`);
+          // Mettre à jour le cache
+          statsChannels.set(guild.id, existingChannel.id);
+          return { 
+            success: false, 
+            message: `❌ Un salon de statistiques existe déjà : ${existingChannel}` 
+          };
+        } else {
+          console.log(`ℹ️ Le salon ${guildSettings.statsChannelId} de la base de données n'existe plus, nettoyage...`);
+          // Nettoyer la base de données
+          await GuildSettings.updateOne(
+            { guildId: guild.id },
+            { $set: { statsChannelId: null } }
+          );
+        }
+      } catch (error) {
+        console.error('❌ Erreur lors de la vérification du salon en base de données:', error);
       }
     }
 
-    // Vérifier les permissions
+    // 3. Vérifier les permissions
+    console.log(`\n🔐 Vérification des permissions...`);
     const me = await guild.members.fetchMe();
     if (!me.permissions.has(PermissionFlagsBits.ManageChannels)) {
-      console.log('❌ Permission refusée: Gérer les salons');
+      const errorMsg = '❌ Je n\'ai pas la permission de gérer les salons sur ce serveur.';
+      console.log(errorMsg);
       return { 
         success: false, 
-        message: 'Je n\'ai pas la permission de gérer les salons sur ce serveur.' 
+        message: errorMsg
       };
     }
 
-    // Créer le salon vocal
-    console.log(`🔄 Création du salon de statistiques pour ${guild.name}...`);
-    const channel = await guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildVoice,
-      permissionOverwrites: [
-        {
-          id: guild.roles.everyone.id,
-          deny: [PermissionFlagsBits.Connect],
-        },
-      ],
-      reason: 'Création du salon de statistiques des membres',
-    });
+    // 4. Vérifier une dernière fois qu'aucun salon n'existe
+    console.log(`\n🔍 Dernière vérification des salons...`);
+    const finalCheck = await GuildSettings.findOne({ guildId: guild.id });
+    if (finalCheck?.statsChannelId) {
+      const existingChannel = guild.channels.cache.get(finalCheck.statsChannelId) || 
+                            await guild.channels.fetch(finalCheck.statsChannelId).catch(() => null);
+      
+      if (existingChannel) {
+        console.log(`⚠️ Un salon a été trouvé lors de la vérification finale: #${existingChannel.name} (${existingChannel.id})`);
+        statsChannels.set(guild.id, existingChannel.id);
+        return { 
+          success: false, 
+          message: `❌ Un salon de statistiques existe déjà : ${existingChannel}`
+        };
+      }
+    }
 
-    // Mettre à jour GuildSettings
-    await GuildSettings.findOneAndUpdate(
-      { guildId: guild.id },
-      { $set: { statsChannelId: channel.id } },
-      { upsert: true, new: true }
-    );
+    // 5. Créer le salon vocal
+    console.log(`\n🔄 Création du salon de statistiques...`);
+    try {
+      const channel = await guild.channels.create({
+        name: channelName,
+        type: ChannelType.GuildVoice,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.Connect],
+          },
+        ],
+        reason: 'Création du salon de statistiques des membres',
+      });
 
-    // Mettre à jour le cache
-    statsChannels.set(guild.id, channel.id);
-    console.log(`🔄 Cache mis à jour pour le serveur: ${guild.id}`);
+      console.log(`✅ Salon créé avec succès: #${channel.name} (${channel.id})`);
 
-    return { 
-      success: true, 
-      message: `✅ Salon de statistiques créé : ${channel}`,
-      channel 
-    };
+      // 6. Mettre à jour la base de données
+      console.log(`\n💾 Mise à jour de la base de données...`);
+      await GuildSettings.findOneAndUpdate(
+        { guildId: guild.id },
+        { $set: { statsChannelId: channel.id } },
+        { upsert: true, new: true }
+      );
+      console.log(`✅ Base de données mise à jour pour le serveur: ${guild.id}`);
+
+      // 7. Mettre à jour le cache
+      statsChannels.set(guild.id, channel.id);
+      console.log(`✅ Cache mis à jour pour le serveur: ${guild.id}`);
+
+      // 8. Mettre à jour immédiatement le compteur
+      console.log(`\n🔄 Mise à jour initiale du compteur...`);
+      await updateMemberCount(guild);
+
+      return { 
+        success: true, 
+        message: `✅ Salon de statistiques créé avec succès : ${channel}`,
+        channel 
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la création du salon:', error);
+      // Nettoyer en cas d'échec
+      statsChannels.delete(guild.id);
+      throw error; // Laisser le gestionnaire d'erreur global gérer
+    }
   } catch (error) {
     console.error('❌ Erreur lors de la création du salon de statistiques:', error);
     return { 

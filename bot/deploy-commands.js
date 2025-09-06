@@ -1,25 +1,42 @@
 // deploy-commands.js
-const { REST, Routes } = require('discord.js');
+const { REST, Routes, ApplicationCommandType } = require('discord.js');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
 // Fonction récursive pour charger les commandes
-function loadCommands(dir) {
+function loadCommands(dir, isContextMenu = false) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   const commands = [];
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
+    const isContextDir = entry.name === 'context' || isContextMenu;
 
     if (entry.isDirectory()) {
-      commands.push(...loadCommands(fullPath));
+      commands.push(...loadCommands(fullPath, isContextDir));
     } else if (entry.isFile() && entry.name.endsWith('.js')) {
-      const command = require(fullPath);
-      if ('data' in command && 'execute' in command) {
-        commands.push(command.data.toJSON());
-      } else {
-        console.warn(`⚠️ La commande ${entry.name} est invalide`);
+      try {
+        delete require.cache[require.resolve(fullPath)];
+        const command = require(fullPath);
+        
+        if ('data' in command && 'execute' in command) {
+          const commandData = command.data.toJSON();
+          
+          // Si c'est une commande de menu contextuel, s'assurer qu'elle a le bon type
+          if (isContextMenu || fullPath.includes('context/')) {
+            if (!commandData.type) {
+              commandData.type = ApplicationCommandType.User; // Par défaut, menu contextuel utilisateur
+            }
+          }
+          
+          commands.push(commandData);
+          console.log(`✅ Commande chargée: ${commandData.name} (${commandData.type || 'Slash'})`);
+        } else {
+          console.warn(`⚠️ La commande ${entry.name} est invalide (manque data ou execute)`);
+        }
+      } catch (error) {
+        console.error(`❌ Erreur lors du chargement de la commande ${fullPath}:`, error);
       }
     }
   }

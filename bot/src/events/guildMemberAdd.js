@@ -1,6 +1,8 @@
-const { Events, ChannelType, PermissionsBitField } = require('discord.js');
+const { Events } = require('discord.js');
 const { GuildSettings } = require('../models/GuildSettings');
 const { statsChannels, updateMemberCount } = require('../utils/stats-vocal');
+const logger = require('../utils/logger');
+const User = require('../models/User');
 
 module.exports = {
   name: Events.GuildMemberAdd,
@@ -12,33 +14,29 @@ module.exports = {
    * @param {Client} client - L'instance du client Discord
    */
   async execute(member, client) {
-    console.log(`👋 Nouveau membre: ${member.user.tag} (${member.id}) sur ${member.guild.name}`);
-
-    // Créer ou mettre à jour l'utilisateur dans la base de données
     try {
-      const user = await client.database.getUser({
-        id: member.id,
+      logger.info(`Nouveau membre: ${member.user.tag} (${member.id}) sur ${member.guild.name}`);
+      
+      // Créer ou mettre à jour l'utilisateur dans la base de données
+      const user = await User.findOrCreate({
+        userId: member.id,
+        guildId: member.guild.id,
         username: member.user.username,
         discriminator: member.user.discriminator,
-        avatar: member.user.avatar,
         bot: member.user.bot,
-        guildId: member.guild.id,
+        avatar: member.user.avatar,
+        joinedAt: member.joinedAt
       });
 
-      // Mettre à jour la date d'arrivée si nécessaire
-      if (member.joinedAt && (!user.joinedAt || user.joinedAt > member.joinedAt)) {
-        user.joinedAt = member.joinedAt;
-        await user.save();
-      }
-
-      console.log(`✅ Membre enregistré: ${member.user.tag} (${member.id})`);
+      logger.info(`✅ Membre enregistré: ${member.user.tag} (${member.id})`);
 
       // Mettre à jour le compteur de membres si un salon de stats existe
       if (statsChannels.has(member.guild.id)) {
-        updateMemberCount(member.guild);
+        logger.info(`Mise à jour du compteur pour le nouveau membre: ${member.user.tag}`);
+        await updateMemberCount(member.guild);
       }
-    } catch (err) {
-      console.error(`❌ Erreur lors de l'enregistrement du membre ${member.user.tag}:`, err);
+    } catch (error) {
+      logger.error(`Erreur lors de l'enregistrement du membre ${member.user.tag}:`, error);
     }
 
     // Envoyer un message de bienvenue

@@ -86,22 +86,40 @@ class SunatiaBot extends Client {
   }
 
   async loadCommands(dir = path.join(__dirname, 'commands')) {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) await this.loadCommands(fullPath);
-      else if (file.endsWith('.js')) {
-        delete require.cache[require.resolve(fullPath)];
-        const command = require(fullPath);
-        if ('data' in command && 'execute' in command) {
-          this.commands.set(command.data.name, command);
-          console.log(`✅ Commande chargée: ${command.data.name}`);
-        } else {
-          console.warn(`⚠️ La commande à ${fullPath} manque "data" ou "execute"`);
+    const loadCommandsFromDir = async (dirPath, isContextMenu = false) => {
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        const fullPath = path.join(dirPath, file);
+        const stat = fs.lstatSync(fullPath);
+
+        if (stat.isDirectory()) {
+          await loadCommandsFromDir(fullPath, isContextMenu || file === 'context');
+        } else if (file.endsWith('.js')) {
+          try {
+            delete require.cache[require.resolve(fullPath)];
+            const command = require(fullPath);
+
+            if ('data' in command && 'execute' in command) {
+              if (isContextMenu || fullPath.includes('context/')) {
+                // Pour les commandes de menu contextuel
+                this.commands.set(`context:${command.data.name}`, command);
+                console.log(`✅ Menu contextuel chargé: ${command.data.name}`);
+              } else {
+                // Pour les commandes slash normales
+                this.commands.set(command.data.name, command);
+                console.log(`✅ Commande chargée: ${command.data.name}`);
+              }
+            } else {
+              console.warn(`⚠️ La commande à ${fullPath} manque "data" ou "execute"`);
+            }
+          } catch (error) {
+            console.error(`❌ Erreur lors du chargement de ${fullPath}:`, error);
+          }
         }
       }
-    }
+    };
+
+    await loadCommandsFromDir(dir);
   }
 
   async loadEvents() {

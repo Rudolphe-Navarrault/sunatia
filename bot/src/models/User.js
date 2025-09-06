@@ -115,6 +115,18 @@ userSchema.statics.updateLastActivity = async function (userId, guildId) {
   }
 };
 
+// Méthode pour définir la localité d'un utilisateur
+userSchema.methods.setLocation = function(location) {
+  this.metadata.set('location', location);
+  return this.save();
+};
+
+// Méthode pour obtenir la localité d'un utilisateur
+userSchema.methods.getLocation = function() {
+  return this.metadata.get('location') || 'Non précisée';
+};
+
+// Middleware pour la sauvegarde
 userSchema.pre('save', function (next) {
   if (!this.joinedAt) this.joinedAt = new Date();
   this.lastSeen = new Date();

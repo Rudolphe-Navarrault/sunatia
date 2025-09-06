@@ -1,12 +1,16 @@
 // events/interactionCreate.js
 const { Events } = require('discord.js');
 const logger = require('../utils/logger');
+const { ensureUser } = require('../middleware/userMiddleware');
 
 module.exports = {
   name: Events.InteractionCreate,
   once: false,
 
   async execute(interaction, client) {
+    // --- Middleware : s'assurer que l'utilisateur existe dans la base de données ---
+    await ensureUser(interaction, client);
+
     // --- Middleware : mise à jour de la dernière activité ---
     if (interaction.inGuild() && interaction.user && !interaction.user.bot) {
       try {
@@ -141,42 +145,72 @@ module.exports = {
       // --- Gestion des commandes slash ---
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
+
         if (!command) {
-          logger.warn(`Commande inconnue: ${interaction.commandName}`);
-          if (!interaction.replied && !interaction.deferred) {
-            return interaction
-              .reply({
-                content: "❌ Cette commande n'existe pas.",
-                flags: 1 << 6, // Éphémère
-              })
-              .catch(() => {});
-          }
-          return;
+          logger.warn(`Aucune commande ${interaction.commandName} trouvée.`);
+          return handleError("Cette commande n'existe plus ou n'est pas disponible.");
         }
 
-        logger.info(`Commande "${interaction.commandName}" exécutée par ${interaction.user.tag}`);
+        // Vérification des permissions
+        if (command.permissions) {
+          const missingPerms = [];
+          for (const perm of command.permissions) {
+            if (!interaction.member.permissions.has(perm)) {
+              missingPerms.push(perm);
+            }
+          }
 
-        // Ne pas différer ici, la commande s'en charge
+          if (missingPerms.length > 0) {
+            return handleError(
+              `Vous n'avez pas les permissions nécessaires : ${missingPerms.join(', ')}`
+            );
+          }
+        }
+
+        // Exécution de la commande
         try {
-          return await command.execute(interaction, client);
-        } catch (err) {
-          // Ignorer silencieusement si interaction déjà expirée
-          if (err.code === 10062 || err.code === 40060) {
-            logger.warn(`Interaction expirée ou déjà traitée pour ${interaction.commandName}`);
-            return;
+          logger.info(
+            `Exécution de la commande ${interaction.commandName} par ${interaction.user.tag}`
+          );
+          await command.execute(interaction, client);
+        } catch (error) {
+          await handleError(error, `Erreur lors de l'exécution de la commande ${interaction.commandName}`);
+        }
+      }
+      // --- Gestion des menus contextuels ---
+      else if (interaction.isUserContextMenuCommand()) {
+        const command = client.commands.get(`context:${interaction.commandName}`);
+
+        if (!command) {
+          logger.warn(`Aucune commande de menu contextuel ${interaction.commandName} trouvée.`);
+          return handleError("Cette commande de menu contextuel n'existe plus ou n'est pas disponible.");
+        }
+
+        // Vérification des permissions
+        if (command.permissions) {
+          const missingPerms = [];
+          for (const perm of command.permissions) {
+            if (!interaction.member.permissions.has(perm)) {
+              missingPerms.push(perm);
+            }
           }
 
-          logger.error(`Erreur dans la commande ${interaction.commandName}:`, err);
-
-          if (!interaction.replied && !interaction.deferred) {
-            return interaction
-              .reply({
-                content: `❌ Une erreur est survenue lors de l'exécution de la commande.`,
-                flags: 1 << 6,
-              })
-              .catch(() => {});
+          if (missingPerms.length > 0) {
+            return handleError(
+              `Vous n'avez pas les permissions nécessaires : ${missingPerms.join(', ')}`
+            );
           }
         }
+
+        // Exécution de la commande de menu contextuel
+        try {
+          logger.info(
+            `Exécution du menu contextuel ${interaction.commandName} par ${interaction.user.tag}`
+          );
+          await command.execute(interaction, client);
+        } catch (error) {
+          await handleError(error, `Erreur lors de l'exécution du menu contextuel ${interaction.commandName}`);
+        }  
       }
 
       // --- Gestion de l’autocomplétion ---

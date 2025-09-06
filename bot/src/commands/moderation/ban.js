@@ -7,17 +7,15 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
     .setDescription('Bannir un membre du serveur')
-    .addUserOption(option =>
-      option.setName('membre')
-        .setDescription('Le membre à bannir')
-        .setRequired(true)
+    .addUserOption((option) =>
+      option.setName('membre').setDescription('Le membre à bannir').setRequired(true)
     )
-    .addStringOption(option =>
-      option.setName('raison')
-        .setDescription('La raison du bannissement')
+    .addStringOption((option) =>
+      option.setName('raison').setDescription('La raison du bannissement')
     )
-    .addIntegerOption(option =>
-      option.setName('jours')
+    .addIntegerOption((option) =>
+      option
+        .setName('jours')
         .setDescription('Nombre de jours de messages à supprimer (0-7)')
         .setMinValue(0)
         .setMaxValue(7)
@@ -34,8 +32,9 @@ module.exports = {
     // Vérifier si le bot peut bannir le membre
     if (!member.bannable) {
       return interaction.reply({
-        content: '❌ Je ne peux pas bannir ce membre. Vérifiez mes permissions et la hiérarchie des rôles.',
-        ephemeral: true
+        content:
+          '❌ Je ne peux pas bannir ce membre. Vérifiez mes permissions et la hiérarchie des rôles.',
+        ephemeral: true,
       });
     }
 
@@ -43,7 +42,7 @@ module.exports = {
     if (member.id === user.id) {
       return interaction.reply({
         content: '❌ Vous ne pouvez pas vous bannir vous-même !',
-        ephemeral: true
+        ephemeral: true,
       });
     }
 
@@ -51,22 +50,22 @@ module.exports = {
     if (member.roles.highest.position >= interaction.member.roles.highest.position) {
       return interaction.reply({
         content: '❌ Vous ne pouvez pas bannir un membre avec un rôle supérieur ou égal au vôtre.',
-        ephemeral: true
+        ephemeral: true,
       });
     }
 
     try {
       // Effectuer le bannissement
-      await member.ban({ 
+      await member.ban({
         days: days || 0,
-        reason: `[${user.tag}] ${reason || 'Aucune raison fournie'}`
+        reason: `[${user.tag}] ${reason || 'Aucune raison fournie'}`,
       });
 
       // Envoyer un message de confirmation
       const response = await interaction.reply({
         content: `✅ ${member.user.tag} a été banni avec succès.`,
         ephemeral: true,
-        fetchReply: true
+        fetchReply: true,
       });
 
       // Envoyer le log de modération (géré automatiquement par le modèle)
@@ -77,13 +76,13 @@ module.exports = {
         reason: reason,
         duration: null,
         channel: interaction.channel,
-        messageLink: `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}/${response.id}`
+        messageLink: `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}/${response.id}`,
       });
 
       // Envoyer un message au membre banni (si possible)
       try {
         await member.send({
-          content: `Vous avez été banni du serveur **${interaction.guild.name}**\n**Raison:** ${reason || 'Aucune raison fournie'}`
+          content: `Vous avez été banni du serveur **${interaction.guild.name}**\n**Raison:** ${reason || 'Aucune raison fournie'}`,
         });
       } catch (dmError) {
         logger.warn(`Impossible d'envoyer un MP à ${member.user.tag}: ${dmError.message}`);
@@ -92,7 +91,7 @@ module.exports = {
       logger.error(`Erreur lors du bannissement de ${member.user.tag}:`, error);
       await interaction.reply({
         content: '❌ Une erreur est survenue lors du bannissement du membre.',
-        ephemeral: true
+        ephemeral: true,
       });
     }
   },
