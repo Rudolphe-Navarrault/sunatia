@@ -26,7 +26,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.3.3' : '⚡ Sunatia | v1.3.3',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.4.0' : '⚡ Sunatia | v1.4.0',
             type: 4,
           },
         ],
@@ -101,13 +101,23 @@ class SunatiaBot extends Client {
 
             if ('data' in command && 'execute' in command) {
               if (isContextMenu || fullPath.includes('context/')) {
-                // Pour les commandes de menu contextuel
                 this.commands.set(`context:${command.data.name}`, command);
                 console.log(`✅ Menu contextuel chargé: ${command.data.name}`);
               } else {
-                // Pour les commandes slash normales
+                // ⚡ Détecter automatiquement la catégorie depuis le dossier parent
+                const categoryName = path.basename(path.dirname(fullPath));
+                command.category = categoryName;
+
+                // Ajouter la catégorie à la liste globale si pas déjà présente
+                if (!this.commandCategories) this.commandCategories = [];
+                if (!this.commandCategories.includes(categoryName)) {
+                  this.commandCategories.push(categoryName);
+                }
+
                 this.commands.set(command.data.name, command);
-                console.log(`✅ Commande chargée: ${command.data.name}`);
+                console.log(
+                  `✅ Commande chargée: ${command.data.name} (catégorie: ${categoryName})`
+                );
               }
             } else {
               console.warn(`⚠️ La commande à ${fullPath} manque "data" ou "execute"`);

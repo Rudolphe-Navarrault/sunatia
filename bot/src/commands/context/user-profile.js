@@ -42,8 +42,9 @@ module.exports = {
       const accountCreated = formatDate(targetUser.createdAt);
       // Formater la date d'arrivée sur le serveur
       const joinedAt = targetMember.joinedAt ? formatDate(targetMember.joinedAt) : 'Inconnue';
-      // Récupérer la localité
+      // Récupérer les informations de l'utilisateur
       const location = userData.getLocation();
+      const birthday = userData.getBirthday();
 
       // Créer l'embed du profil
       const profileEmbed = new EmbedBuilder()
@@ -62,7 +63,7 @@ module.exports = {
           },
           {
             name: 'Anniversaire',
-            value: 'Non précisée',
+            value: birthday || 'Non précisé',
             inline: true
           },
           {

@@ -123,7 +123,38 @@ userSchema.methods.setLocation = function(location) {
 
 // Méthode pour obtenir la localité d'un utilisateur
 userSchema.methods.getLocation = function() {
-  return this.metadata.get('location') || 'Non précisée';
+  return this.metadata?.get('location') || 'Non spécifiée';
+};
+
+// Méthode pour définir la date d'anniversaire
+userSchema.methods.setBirthday = async function(day, month, year = null) {
+  // Validation de la date
+  const date = new Date();
+  date.setFullYear(year || 2000, month - 1, day);
+  
+  if (date.getDate() !== day || date.getMonth() + 1 !== month) {
+    throw new Error('Date d\'anniversaire invalide');
+  }
+
+  this.birthdate = date;
+  return this.save();
+};
+
+// Méthode pour obtenir la date d'anniversaire formatée
+userSchema.methods.getBirthday = function() {
+  if (!this.birthdate) return null;
+  
+  const date = new Date(this.birthdate);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  
+  // Si l'année est 2000, on considère qu'elle n'est pas spécifiée
+  if (year === 2000) {
+    return `${day}/${month}`;
+  }
+  
+  return `${day}/${month}/${year}`;
 };
 
 // Middleware pour la sauvegarde
