@@ -1,10 +1,20 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  Collection,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
 const config = require('./config');
 const database = require('./utils/database');
 const Migrations = require('./utils/migrations');
 const fs = require('node:fs');
 const path = require('node:path');
 const XP = require('./models/XP');
+
+// Permissions
+const { userHasPermission, hasCommandPermission } = require('./utils/permission');
 
 class SunatiaBot extends Client {
   constructor(options = {}) {
@@ -26,7 +36,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.4.0' : '⚡ Sunatia | v1.4.0',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.5.0' : '⚡ Sunatia | v1.5.0',
             type: 4,
           },
         ],
@@ -43,6 +53,7 @@ class SunatiaBot extends Client {
     this.events = new Collection();
     this.cooldowns = new Collection();
     this.interactionHandlers = { buttons: {} };
+    this.permissionPages = new Collection();
     this.database = database;
     this.config = config;
   }
@@ -54,29 +65,20 @@ class SunatiaBot extends Client {
       await this.loadCommands();
       await this.loadEvents();
 
-      // Initialiser les salons de statistiques
       const { initializeStatsChannels, setClient } = require('./utils/stats-vocal');
-      setClient(this); // Passer l'instance du client à stats-vocal.js
+      setClient(this);
       await initializeStatsChannels();
 
       const { startBankCron } = require('./utils/bankCron');
-
-      // Enregistrer le handler des boutons help
-      const bankCmd = this.commands.get('bank');
-      if (bankCmd?.handleButton) {
-        this.interactionHandlers.buttons['help'] = async (interaction, action) => {
-          await bankCmd.handleButton(interaction);
-        };
-      }
-
-      const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
-      await this.login(token);
-
       startBankCron();
       console.log('📆 Cron bancaire activé');
 
       this.initXPCache();
       this.registerLeaderboardButtons();
+      this.registerPermissionButtons();
+
+      const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
+      await this.login(token);
 
       console.log(`✅ Bot démarré et prêt (${this.isDev ? 'DEV' : 'PROD'})`);
     } catch (error) {
@@ -104,11 +106,8 @@ class SunatiaBot extends Client {
                 this.commands.set(`context:${command.data.name}`, command);
                 console.log(`✅ Menu contextuel chargé: ${command.data.name}`);
               } else {
-                // ⚡ Détecter automatiquement la catégorie depuis le dossier parent
                 const categoryName = path.basename(path.dirname(fullPath));
                 command.category = categoryName;
-
-                // Ajouter la catégorie à la liste globale si pas déjà présente
                 if (!this.commandCategories) this.commandCategories = [];
                 if (!this.commandCategories.includes(categoryName)) {
                   this.commandCategories.push(categoryName);
@@ -171,7 +170,7 @@ class SunatiaBot extends Client {
       let forceRefresh = false;
 
       if (action === 'prev' && newPage > 1) newPage--;
-      if (action === 'next') newPage++;
+      if (action === 'next' && newPage < totalPages) newPage++;
       if (action === 'refresh') forceRefresh = true;
 
       if (leaderboardCmd.displayLeaderboard)
@@ -179,30 +178,58 @@ class SunatiaBot extends Client {
       else
         await interaction.reply({ content: '❌ Handler leaderboard introuvable', flags: 1 << 6 });
     };
+  }
 
-    this.interactionHandlers.buttons['page'] = async (interaction, type, page) => {
-      const newPage = parseInt(page) || 1;
-      if (leaderboardCmd?.displayLeaderboard) {
-        await leaderboardCmd.displayLeaderboard(interaction, type, newPage, false);
-      } else {
-        await interaction.reply({
-          content: '❌ Impossible de charger le classement. Veuillez réessayer.',
-          flags: 1 << 6,
-        });
-      }
-    };
+  registerPermissionButtons() {
+    this.on('interactionCreate', async (interaction) => {
+      if (!interaction.isButton()) return;
 
-    this.interactionHandlers.buttons['refresh'] = async (interaction, type, page) => {
-      const newPage = parseInt(page) || 1;
-      if (leaderboardCmd?.displayLeaderboard) {
-        await leaderboardCmd.displayLeaderboard(interaction, type, newPage, true);
-      } else {
-        await interaction.reply({
-          content: '❌ Impossible de rafraîchir le classement. Veuillez réessayer.',
-          flags: 1 << 6,
-        });
-      }
-    };
+      const [type, action, id] = interaction.customId.split('_');
+      if (type !== 'perm') return;
+
+      const pageData = this.permissionPages.get(id);
+      if (!pageData)
+        return interaction.reply({ content: '❌ Données introuvables.', ephemeral: true });
+
+      let { items, currentPage, totalPages, embed, row } = pageData;
+
+      if (action === 'prev' && currentPage > 1) currentPage--;
+      if (action === 'next' && currentPage < totalPages) currentPage++;
+
+      const start = (currentPage - 1) * 5;
+      const end = start + 5;
+
+      const newEmbed = embed
+        .setDescription(items.slice(start, end).join('\n'))
+        .setFooter({ text: `Page ${currentPage}/${totalPages}` });
+
+      const newRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`perm_prev_${id}`)
+          .setLabel('⬅️')
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(currentPage === 1),
+        new ButtonBuilder()
+          .setCustomId(`perm_next_${id}`)
+          .setLabel('➡️')
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(currentPage === totalPages)
+      );
+
+      await interaction.update({ embeds: [newEmbed], components: [newRow] });
+
+      pageData.currentPage = currentPage;
+      this.permissionPages.set(id, pageData);
+    });
+  }
+
+  // Wrappers pour permissions
+  async hasPermission(userId, perm, guildId) {
+    return userHasPermission(guildId, userId, perm);
+  }
+
+  async hasCommandPermission(userId, commandName, guildId) {
+    return hasCommandPermission(guildId, userId, commandName);
   }
 
   async shutdown() {

@@ -29,6 +29,10 @@ const userSchema = new mongoose.Schema(
     joinedAt: { type: Date, default: Date.now },
     lastSeen: { type: Date, default: Date.now },
     metadata: { type: Map, of: mongoose.Schema.Types.Mixed, default: new Map() },
+
+    // ✅ Nouveau pour le système de permissions
+    groups: { type: [String], default: [] }, // groupes auxquels l'utilisateur appartient
+    permissions: { type: [String], default: [] }, // permissions directes
   },
   { timestamps: true }
 );
@@ -54,6 +58,8 @@ userSchema.statics.findOrCreate = async function (query, defaults = {}) {
       joinedAt: new Date(),
       lastSeen: new Date(),
       stats: { level: 1, xp: 0, messages: 0, voiceTime: 0, lastMessage: null, lastVoiceJoin: null },
+      groups: [], // initialisation vide
+      permissions: [], // initialisation vide
       ...defaults,
     });
     await user.save();
@@ -104,7 +110,7 @@ userSchema.methods.addXP = async function (amount) {
 // Mettre à jour la dernière activité
 userSchema.statics.updateLastActivity = async function (userId, guildId) {
   try {
-    const UserModel = this; // <-- s'assurer que c'est bien le modèle
+    const UserModel = this;
     await UserModel.findOneAndUpdate(
       { userId, guildId },
       { $set: { 'stats.lastActivity': new Date(), lastSeen: new Date() } },
@@ -116,24 +122,23 @@ userSchema.statics.updateLastActivity = async function (userId, guildId) {
 };
 
 // Méthode pour définir la localité d'un utilisateur
-userSchema.methods.setLocation = function(location) {
+userSchema.methods.setLocation = function (location) {
   this.metadata.set('location', location);
   return this.save();
 };
 
 // Méthode pour obtenir la localité d'un utilisateur
-userSchema.methods.getLocation = function() {
+userSchema.methods.getLocation = function () {
   return this.metadata?.get('location') || 'Non spécifiée';
 };
 
 // Méthode pour définir la date d'anniversaire
-userSchema.methods.setBirthday = async function(day, month, year = null) {
-  // Validation de la date
+userSchema.methods.setBirthday = async function (day, month, year = null) {
   const date = new Date();
   date.setFullYear(year || 2000, month - 1, day);
-  
+
   if (date.getDate() !== day || date.getMonth() + 1 !== month) {
-    throw new Error('Date d\'anniversaire invalide');
+    throw new Error("Date d'anniversaire invalide");
   }
 
   this.birthdate = date;
@@ -141,19 +146,18 @@ userSchema.methods.setBirthday = async function(day, month, year = null) {
 };
 
 // Méthode pour obtenir la date d'anniversaire formatée
-userSchema.methods.getBirthday = function() {
+userSchema.methods.getBirthday = function () {
   if (!this.birthdate) return null;
-  
+
   const date = new Date(this.birthdate);
   const day = date.getDate().toString().padStart(2, '0');
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const year = date.getFullYear();
-  
-  // Si l'année est 2000, on considère qu'elle n'est pas spécifiée
+
   if (year === 2000) {
     return `${day}/${month}`;
   }
-  
+
   return `${day}/${month}/${year}`;
 };
 

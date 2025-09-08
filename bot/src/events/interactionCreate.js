@@ -9,7 +9,7 @@ module.exports = {
   async execute(interaction, client) {
     await ensureUser(interaction, client);
 
-    // MAJ de la dernière activité
+    // --- MAJ de la dernière activité ---
     if (interaction.inGuild() && interaction.user && !interaction.user.bot) {
       try {
         const UserModel = client.database?.models?.User;
@@ -21,6 +21,7 @@ module.exports = {
       }
     }
 
+    // --- Gestion des erreurs uniformisée ---
     const handleError = async (
       err,
       msg = "Une erreur est survenue lors du traitement de l'interaction."
@@ -30,9 +31,9 @@ module.exports = {
 
       try {
         if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: `❌ ${msg}`, flags: 1 << 6 });
+          await interaction.reply({ content: `❌ ${msg}`, ephemeral: true });
         } else if (interaction.deferred) {
-          await interaction.editReply({ content: `❌ ${msg}`, flags: 1 << 6 });
+          await interaction.editReply({ content: `❌ ${msg}`, ephemeral: true });
         }
       } catch (replyError) {
         if (replyError.code !== 10062 && replyError.code !== 40060) {
@@ -42,7 +43,7 @@ module.exports = {
     };
 
     try {
-      // --- Boutons et menus ---
+      // --- Boutons & menus déroulants ---
       if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (interaction.customId.startsWith('help_') || interaction.customId === 'help_category') {
           const command = client.commands.get('help');
@@ -92,6 +93,19 @@ module.exports = {
           return handleError("Cette commande n'existe plus ou n'est pas disponible.");
         }
 
+        // ✅ Vérification des permissions customisées
+        const allowed = await client.hasCommandPermission(
+          interaction.user.id,
+          interaction.commandName,
+          interaction.guild.id
+        );
+        if (!allowed) {
+          return interaction.reply({
+            content: '❌ Vous n’avez pas la permission pour utiliser cette commande.',
+            ephemeral: true,
+          });
+        }
+
         try {
           await command.execute(interaction, client);
         } catch (error) {
@@ -109,6 +123,19 @@ module.exports = {
           return handleError(
             "Cette commande de menu contextuel n'existe plus ou n'est pas disponible."
           );
+        }
+
+        // ✅ Vérification des permissions customisées
+        const allowed = await client.hasCommandPermission(
+          interaction.user.id,
+          interaction.commandName,
+          interaction.guild.id
+        );
+        if (!allowed) {
+          return interaction.reply({
+            content: '❌ Vous n’avez pas la permission pour utiliser ce menu contextuel.',
+            ephemeral: true,
+          });
         }
 
         try {

@@ -5,9 +5,10 @@ const logger = require('../../utils/logger');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warnings')
-    .setDescription('Affiche les avertissements d\'un membre')
-    .addUserOption(option =>
-      option.setName('membre')
+    .setDescription("Affiche les avertissements d'un membre")
+    .addUserOption((option) =>
+      option
+        .setName('membre')
         .setDescription('Le membre dont vous voulez voir les avertissements')
         .setRequired(true)
     )
@@ -16,7 +17,7 @@ module.exports = {
 
   async execute(interaction) {
     const member = interaction.options.getMember('membre');
-    
+
     try {
       // Récupérer les avertissements actifs du membre
       const warnings = await Warning.find({
@@ -24,8 +25,8 @@ module.exports = {
         guildId: interaction.guildId,
         $or: [
           { active: true, expiresAt: null },
-          { active: true, expiresAt: { $gt: new Date() } }
-        ]
+          { active: true, expiresAt: { $gt: new Date() } },
+        ],
       }).sort({ createdAt: -1 });
 
       // Récupérer le total des points d'avertissement
@@ -36,16 +37,16 @@ module.exports = {
             guildId: interaction.guildId,
             $or: [
               { active: true, expiresAt: null },
-              { active: true, expiresAt: { $gt: new Date() } }
-            ]
-          }
+              { active: true, expiresAt: { $gt: new Date() } },
+            ],
+          },
         },
         {
           $group: {
             _id: null,
-            total: { $sum: '$points' }
-          }
-        }
+            total: { $sum: '$points' },
+          },
+        },
       ]);
 
       const totalPointsCount = totalPoints[0]?.total || 0;
@@ -56,15 +57,15 @@ module.exports = {
         .setTitle(`⚠️ Avertissements de ${member.user.tag}`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields(
-          { 
-            name: '📊 Points totaux', 
+          {
+            name: '📊 Points totaux',
             value: `**${totalPointsCount}** points d'avertissement actifs`,
-            inline: true 
+            inline: true,
           },
-          { 
-            name: '📝 Avertissements actifs', 
+          {
+            name: '📝 Avertissements actifs',
             value: `**${warnings.length}** avertissement(s) en cours`,
-            inline: true 
+            inline: true,
           }
         )
         .setFooter({ text: `ID: ${member.id}` })
@@ -74,19 +75,21 @@ module.exports = {
       if (warnings.length > 0) {
         const warningsList = warnings.map((warn, index) => {
           const date = `<t:${Math.floor(warn.createdAt.getTime() / 1000)}:R>`;
-          const expires = warn.expiresAt 
-            ? `Expire <t:${Math.floor(warn.expiresAt.getTime() / 1000)}:R>` 
-            : 'N\'expire pas';
-          
-          return `**#${index + 1}** - ${warn.points} point(s) - ${date}\n` +
-                 `**Raison:** ${warn.reason}\n` +
-                 `**Par:** <@${warn.moderatorId}> | ${expires}\n`;
+          const expires = warn.expiresAt
+            ? `Expire <t:${Math.floor(warn.expiresAt.getTime() / 1000)}:R>`
+            : "N'expire pas";
+
+          return (
+            `**#${index + 1}** - ${warn.points} point(s) - ${date}\n` +
+            `**Raison:** ${warn.reason}\n` +
+            `**Par:** <@${warn.moderatorId}> | ${expires}\n`
+          );
         });
 
         // Diviser en plusieurs champs si nécessaire (limite de 1024 caractères par champ)
         let currentField = '';
         const fields = [];
-        
+
         for (const warning of warningsList) {
           if ((currentField + warning).length > 1024) {
             fields.push({ name: '\u200B', value: currentField, inline: false });
@@ -95,7 +98,7 @@ module.exports = {
             currentField += (currentField ? '\n\n' : '') + warning;
           }
         }
-        
+
         if (currentField) {
           fields.push({ name: '\u200B', value: currentField, inline: false });
         }
@@ -109,17 +112,16 @@ module.exports = {
       }
 
       // Envoyer la réponse
-      await interaction.reply({ 
+      await interaction.reply({
         embeds: [embed],
-        ephemeral: true 
+        ephemeral: true,
       });
-
     } catch (error) {
       logger.error('Erreur lors de la récupération des avertissements:', error);
       await interaction.reply({
         content: '❌ Une erreur est survenue lors de la récupération des avertissements.',
-        ephemeral: true
+        ephemeral: true,
       });
     }
-  }
+  },
 };
