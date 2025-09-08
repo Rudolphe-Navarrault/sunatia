@@ -50,14 +50,20 @@ const mode = process.argv[2];
 (async () => {
   try {
     if (mode === '--dev') {
-      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN_DEV);
+      /* const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN_DEV);
 
       console.log('🚀 Déploiement des commandes GUILD (dev)...');
       await rest.put(
         Routes.applicationGuildCommands(process.env.CLIENT_ID_DEV, process.env.DEV_GUILD_ID),
         { body: commands }
       );
-      console.log(`✅ ${commands.length} commandes guild déployées sur le bot DEV !`);
+      console.log(`✅ ${commands.length} commandes guild déployées sur le bot DEV !`); */
+
+      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN_DEV);
+
+      console.log('🚀 Déploiement des commandes GLOBAL (prod)...');
+      await rest.put(Routes.applicationCommands(process.env.CLIENT_ID_DEV), { body: commands });
+      console.log(`✅ ${commands.length} commandes globales déployées sur le bot PROD !`);
     } else if (mode === '--prod') {
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 

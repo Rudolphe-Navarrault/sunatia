@@ -24,7 +24,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('permissions')
     .setDescription('Gérer les permissions du serveur')
-    // USER
+    // --- USER ---
     .addSubcommandGroup((group) =>
       group
         .setName('user')
@@ -52,7 +52,7 @@ module.exports = {
             )
         )
     )
-    // GROUPS
+    // --- GROUPS ---
     .addSubcommandGroup((group) =>
       group
         .setName('groups')
@@ -96,7 +96,7 @@ module.exports = {
             )
         )
     )
-    // CREATE / REMOVE PERMISSIONS
+    // --- CREATE / REMOVE PERMISSIONS ---
     .addSubcommand((sub) =>
       sub
         .setName('create')
@@ -113,7 +113,7 @@ module.exports = {
           opt.setName('permission').setDescription('Nom de la permission').setRequired(true)
         )
     )
-    // LIST
+    // --- LIST ---
     .addSubcommandGroup((group) =>
       group
         .setName('list')
@@ -132,7 +132,7 @@ module.exports = {
             )
         )
     )
-    // CHECK
+    // --- CHECK ---
     .addSubcommand((sub) =>
       sub
         .setName('check')
@@ -143,7 +143,7 @@ module.exports = {
         .addUserOption((opt) => opt.setName('utilisateur').setDescription('Utilisateur à vérifier'))
         .addStringOption((opt) => opt.setName('groupe').setDescription('Groupe à vérifier'))
     )
-    // COMMANDS
+    // --- COMMANDS ---
     .addSubcommandGroup((group) =>
       group
         .setName('commands')
@@ -215,7 +215,7 @@ module.exports = {
       const member = interaction.options.getUser('utilisateur');
       const permission = interaction.options.getString('permission')?.toLowerCase();
 
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(guildId, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -250,7 +250,7 @@ module.exports = {
       const groupName = interaction.options.getString('groupe');
       const permission = interaction.options.getString('permission')?.toLowerCase();
 
-      if (['set', 'unset'].includes(sub) && !(await permissionExists(permission)))
+      if (['set', 'unset'].includes(sub) && !(await permissionExists(guildId, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -321,7 +321,7 @@ module.exports = {
     // --- CREATE / REMOVE PERMISSIONS ---
     if (sub === 'create') {
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (await permissionExists(permission))
+      if (await permissionExists(guildId, permission))
         return interaction.reply({
           content: `❌ La permission "${permission}" existe déjà.`,
           ephemeral: true,
@@ -335,7 +335,7 @@ module.exports = {
 
     if (sub === 'remove') {
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(guildId, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -370,7 +370,7 @@ module.exports = {
 
       if (sub === 'permission') {
         const permissionName = interaction.options.getString('permission')?.toLowerCase();
-        if (!(await permissionExists(permissionName)))
+        if (!(await permissionExists(guildId, permissionName)))
           return interaction.reply({
             content: `❌ La permission "${permissionName}" n'existe pas.`,
             ephemeral: true,
@@ -425,7 +425,7 @@ module.exports = {
       const user = interaction.options.getUser('utilisateur');
       const groupName = interaction.options.getString('groupe');
 
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(guildId, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -471,7 +471,8 @@ module.exports = {
     if (group === 'commands') {
       const command = interaction.options.getString('commande');
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (!(await permissionExists(permission)))
+
+      if (!(await permissionExists(guildId, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
