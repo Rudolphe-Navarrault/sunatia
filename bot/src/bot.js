@@ -5,6 +5,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  Partials,
 } = require('discord.js');
 const config = require('./config');
 const database = require('./utils/database');
@@ -30,7 +31,10 @@ class SunatiaBot extends Client {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
       ],
+      partials: [Partials.Channel, Partials.Message],
       allowedMentions: { parse: ['users', 'roles'], repliedUser: false },
       presence: {
         status: 'online',

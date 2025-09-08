@@ -1,6 +1,8 @@
-const { Events } = require("discord.js");
-const xpController = require("../controllers/xpController");
-const logger = require("../utils/logger");
+require('dotenv').config();
+const { Events, ChannelType } = require('discord.js');
+const xpController = require('../controllers/xpController');
+const logger = require('../utils/logger');
+const axios = require('axios');
 
 const userCooldowns = new Map();
 
@@ -8,21 +10,51 @@ module.exports = {
   name: Events.MessageCreate,
   once: false,
 
-  /**
-   * Gère l'événement de création de message
-   * @param {Message} message - Le message reçu
-   * @param {Client} client - L'instance du client Discord
-   */
   async execute(message, client) {
-    // Ignorer bots, DM et messages trop courts
-    if (message.author.bot || !message.guild || message.content.length < 5)
-      return;
+    // Ignorer les bots
+    if (message.author.bot) return;
+
+    // --- DMs pour la météo ---
+    if (message.channel.type === ChannelType.DM) {
+      const city = message.content.trim();
+      if (!city) {
+        return message.channel.send('❌ Merci de préciser une ville. Exemple : `Paris`');
+      }
+
+      try {
+        const apiKey = process.env.OPENWEATHER_KEY;
+        if (!apiKey) throw new Error('Clé API OpenWeather non définie');
+
+        // Appel API météo (gratuit)
+        const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(
+          city
+        )}&units=metric&lang=fr&appid=${apiKey}`;
+
+        const response = await axios.get(url);
+        const data = response.data;
+
+        const reply = `🌤 **Météo pour ${data.name}** :
+    • Température : ${data.main.temp}°C
+    • Ressenti : ${data.main.feels_like}°C
+    • Humidité : ${data.main.humidity}%
+    • Conditions : ${data.weather[0].description}`;
+
+        return message.channel.send(reply);
+      } catch (err) {
+        console.error(err);
+        return message.channel.send(
+          `❌ Impossible de récupérer la météo pour "${city}". Vérifie l'orthographe ou réessaie plus tard !`
+        );
+      }
+    }
+
+    // --- Messages en serveur pour le leveling ---
+    if (!message.guild || message.content.length < 5) return;
 
     const userId = message.author.id;
     const guildId = message.guild.id;
 
     try {
-      // Récupérer la config serveur depuis la DB
       const guildSettings = await xpController.getGuildSettings(guildId);
       const leveling = guildSettings.leveling || {};
 
@@ -46,9 +78,7 @@ module.exports = {
       userCooldowns.set(cooldownKey, now);
 
       // Calculer XP aléatoire
-      const xpGained = Math.floor(
-        Math.random() * (xpRange.max - xpRange.min + 1) + xpRange.min
-      );
+      const xpGained = Math.floor(Math.random() * (xpRange.max - xpRange.min + 1)) + xpRange.min;
 
       // Ajouter XP
       const result = await xpController.addXp(userId, guildId, xpGained);
@@ -58,21 +88,15 @@ module.exports = {
       if (result.leveledUp) {
         logger.info(`Niveau ${result.level} atteint par ${message.author.tag}`);
 
-        const levelUpChannel =
-          client.channels.cache.get(leveling.channelId) || message.channel;
+        const levelUpChannel = client.channels.cache.get(leveling.channelId) || message.channel;
 
         await levelUpChannel.send({
           content: `🎉 Félicitations <@${userId}>, tu as atteint le niveau **${result.level}** !`,
           allowedMentions: { users: [userId] },
         });
-
-        // TODO: Ajouter rôles/rewards selon niveau si nécessaire
       }
     } catch (error) {
-      logger.error(
-        "Erreur lors du traitement du message pour le leveling:",
-        error
-      );
+      logger.error('Erreur lors du traitement du message pour le leveling:', error);
     }
   },
 };
