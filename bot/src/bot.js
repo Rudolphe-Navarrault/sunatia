@@ -13,6 +13,7 @@ const Migrations = require('./utils/migrations');
 const fs = require('node:fs');
 const path = require('node:path');
 const XP = require('./models/XP');
+const Infraction = require('./models/Infractions');
 
 // Permissions
 const { userHasPermission, hasCommandPermission } = require('./utils/permission');
@@ -32,7 +33,6 @@ class SunatiaBot extends Client {
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.MessageContent,
       ],
       partials: [Partials.Channel, Partials.Message],
       allowedMentions: { parse: ['users', 'roles'], repliedUser: false },
@@ -40,7 +40,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.7.0' : '⚡ Sunatia | v1.7.0',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.8.0' : '⚡ Sunatia | v1.8.0',
             type: 4,
           },
         ],
@@ -60,6 +60,10 @@ class SunatiaBot extends Client {
     this.permissionPages = new Collection();
     this.database = database;
     this.config = config;
+
+    // Stockage temporaire pour infractions
+    this.userMessages = new Map();
+    this.infractionCooldowns = new Map();
   }
 
   async start() {
@@ -81,6 +85,33 @@ class SunatiaBot extends Client {
       this.initXPCache();
       this.registerLeaderboardButtons();
       this.registerPermissionButtons();
+
+      // Listener global pour les modals
+      this.on('interactionCreate', async (interaction) => {
+        if (!interaction.isModalSubmit()) return;
+        if (!interaction.customId.startsWith('infraction-')) return;
+
+        try {
+          const parts = interaction.customId.split('-'); // ["infraction", userId, timestamp]
+          const userId = parts[1];
+          const reason = interaction.fields.getTextInputValue('raison');
+
+          const infraction = await Infraction.findOne({ userId, guildId: interaction.guild.id });
+          if (infraction) {
+            infraction.reasons.push(reason);
+            await infraction.save();
+          }
+
+          await interaction.reply({
+            content: '✅ Ton explication a été enregistrée.',
+            ephemeral: true,
+          });
+        } catch (err) {
+          console.error('❌ Erreur modal infraction:', err);
+          if (!interaction.replied)
+            await interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
+        }
+      });
 
       const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
       await this.login(token);
@@ -114,9 +145,8 @@ class SunatiaBot extends Client {
                 const categoryName = path.basename(path.dirname(fullPath));
                 command.category = categoryName;
                 if (!this.commandCategories) this.commandCategories = [];
-                if (!this.commandCategories.includes(categoryName)) {
+                if (!this.commandCategories.includes(categoryName))
                   this.commandCategories.push(categoryName);
-                }
 
                 this.commands.set(command.data.name, command);
                 console.log(
@@ -169,8 +199,7 @@ class SunatiaBot extends Client {
       const filePath = path.join(handlersPath, file);
       delete require.cache[require.resolve(filePath)];
       const handler = require(filePath);
-
-      const name = path.basename(file, '.js'); // ex: "ticket"
+      const name = path.basename(file, '.js');
       this.interactionHandlers.buttons[name] = handler;
       console.log(`✅ Interaction handler chargé: ${name}`);
     }
