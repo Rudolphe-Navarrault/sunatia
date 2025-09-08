@@ -1,72 +1,96 @@
-// commands/admin/admin-ticket.js
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
+  ChannelType,
   ActionRowBuilder,
+  StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } = require('discord.js');
-const TicketSetup = require('../../models/TicketSetup');
+const TicketConfig = require('../../models/TicketConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('admin-ticket')
-    .setDescription('Setup du système de ticket')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDescription('Configurer le système de tickets')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup')
+        .setDescription('Configurer le système de tickets')
+        .addChannelOption((opt) =>
+          opt
+            .setName('categorie')
+            .setDescription('Catégorie des tickets')
+            .addChannelTypes(ChannelType.GuildCategory)
+            .setRequired(true)
+        )
+        .addRoleOption((opt) =>
+          opt.setName('staffrole').setDescription('Rôle du staff').setRequired(true)
+        )
+        .addChannelOption((opt) =>
+          opt
+            .setName('salon')
+            .setDescription('Salon de setup')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(true)
+        )
+    ),
 
   async execute(interaction) {
-    const channel = interaction.channel;
-    const guild = interaction.guild;
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'setup') {
+      const category = interaction.options.getChannel('categorie');
+      const staffRole = interaction.options.getRole('staffrole');
+      const setupChannel = interaction.options.getChannel('salon');
 
-    // Dropdown pour raison du ticket
-    const reasonMenu = new StringSelectMenuBuilder()
-      .setCustomId('ticket_reason_select')
-      .setPlaceholder('Choisissez la raison du ticket')
-      .addOptions([
-        { label: 'Support général', value: 'support' },
-        { label: 'Bug / problème', value: 'bug' },
-        { label: 'Suggestion', value: 'suggestion' },
-        { label: 'Autre', value: 'other' },
-      ]);
+      const rowMenu = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('ticket_reason')
+          .setPlaceholder('Choisissez la raison du ticket')
+          .addOptions([
+            { label: 'Support', value: 'support' },
+            { label: 'Bug', value: 'bug' },
+            { label: 'Suggestion', value: 'suggestion' },
+            { label: 'Autre', value: 'autre' },
+          ])
+      );
 
-    // Bouton pour créer le ticket
-    const openButton = new ButtonBuilder()
-      .setCustomId('ticket_create')
-      .setLabel('📝 Ouvrir un ticket')
-      .setStyle(ButtonStyle.Primary);
+      const rowButtons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('ticket_create')
+          .setLabel('🎫 Ouvrir un ticket')
+          .setStyle(ButtonStyle.Success)
+      );
 
-    const rowButtons = new ActionRowBuilder().addComponents(openButton);
-    const rowMenu = new ActionRowBuilder().addComponents(reasonMenu);
+      const msg = await setupChannel.send({
+        content: `**${interaction.guild.name} - Support**
+Avant d'ouvrir un ticket:
+• Veuillez voir si vos réponses ne sont pas déjà répondues.
+• Utilisez le salon Entraide.
 
-    const msg = await channel.send({
-      content: `🎟️ **Sunatia Studios - Support**
-    
-    💡 **Avant d'ouvrir un ticket :**
-    • Vérifiez le salon ⁠❓・questions-fr pour voir si votre question a déjà une réponse.
-    • Demandez de l'aide à la communauté dans ⁠🙏・entraide.
-    
-    🐛 **Bugs ou suggestions :**
-    • Signalez un bug dans ⁠🐛・bugs.
-    • Partagez vos idées ou suggestions dans ⁠💡・suggestions.
-    
-    🛠️ **Pour contacter le support :**
-    Cliquez sur un des boutons ci-dessous ou choisissez la raison du ticket dans le menu déroulant.
-    Un ticket sera automatiquement créé dans la catégorie dédiée, et un membre du support vous répondra rapidement !
-    
-    ⚠️ **Note :**
-    Merci de ne pas mentionner le staff inutilement et de ne pas partager vos informations personnelles dans le ticket.`,
+➡️ Sélectionnez une raison puis cliquez sur le bouton ci-dessous.
+Votre ticket sera créé dans **${category.name}**.`,
+        components: [rowMenu, rowButtons],
+      });
 
-      components: [rowMenu, rowButtons],
-    });
+      await TicketConfig.findOneAndUpdate(
+        { guildId: interaction.guild.id },
+        {
+          guildId: interaction.guild.id,
+          categoryId: category.id,
+          staffRoleId: staffRole.id,
+          setupChannelId: setupChannel.id,
+          setupMessageId: msg.id,
+        },
+        { upsert: true }
+      );
 
-    // Enregistrement setup
-    await TicketSetup.findOneAndUpdate(
-      { guildId: guild.id },
-      { guildId: guild.id, channelId: channel.id, messageId: msg.id },
-      { upsert: true }
-    );
-
-    return interaction.reply({ content: '✅ Message de ticket configuré.', ephemeral: true });
+      return interaction.reply({
+        content: '✅ Système de tickets configuré avec succès.',
+        ephemeral: true,
+      });
+    }
   },
 };

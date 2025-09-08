@@ -64,6 +64,7 @@ class SunatiaBot extends Client {
       await Migrations.runMigrations();
       await this.loadCommands();
       await this.loadEvents();
+      await this.loadInteractionHandlers();
 
       const { initializeStatsChannels, setClient } = require('./utils/stats-vocal');
       setClient(this);
@@ -153,6 +154,21 @@ class SunatiaBot extends Client {
       else this.on(event.name, executeWithClient);
 
       console.log(`✅ Événement chargé: ${event.name}`);
+    }
+  }
+
+  async loadInteractionHandlers() {
+    const handlersPath = path.join(__dirname, 'interactionHandlers/buttons');
+    const files = fs.readdirSync(handlersPath).filter((f) => f.endsWith('.js'));
+
+    for (const file of files) {
+      const filePath = path.join(handlersPath, file);
+      delete require.cache[require.resolve(filePath)];
+      const handler = require(filePath);
+
+      const name = path.basename(file, '.js'); // ex: "ticket"
+      this.interactionHandlers.buttons[name] = handler;
+      console.log(`✅ Interaction handler chargé: ${name}`);
     }
   }
 
