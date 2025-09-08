@@ -40,16 +40,23 @@ module.exports = {
     const rowMenu = new ActionRowBuilder().addComponents(reasonMenu);
 
     const msg = await channel.send({
-      content: `**Sunatia - Support**
-Avant d'ouvrir un ticket:
-• Jetez un coup d'œil dans ⁠❓・questions-fr !
-• Demandez aux joueurs dans ⁠🙏・entraide !
+      content: `🎟️ **Sunatia Studios - Support**
+    
+    💡 **Avant d'ouvrir un ticket :**
+    • Vérifiez le salon ⁠❓・questions-fr pour voir si votre question a déjà une réponse.
+    • Demandez de l'aide à la communauté dans ⁠🙏・entraide.
+    
+    🐛 **Bugs ou suggestions :**
+    • Signalez un bug dans ⁠🐛・bugs.
+    • Partagez vos idées ou suggestions dans ⁠💡・suggestions.
+    
+    🛠️ **Pour contacter le support :**
+    Cliquez sur un des boutons ci-dessous ou choisissez la raison du ticket dans le menu déroulant.
+    Un ticket sera automatiquement créé dans la catégorie dédiée, et un membre du support vous répondra rapidement !
+    
+    ⚠️ **Note :**
+    Merci de ne pas mentionner le staff inutilement et de ne pas partager vos informations personnelles dans le ticket.`,
 
-Un bug ou une suggestion ?
-• Utilisez les salons ⁠💡・suggestions ou ⁠🐛・bugs !
-
-Pour contacter le support cliquez sur un des boutons ci-dessous !
-Un ticket sera automatiquement créé dans une section située au dessus !`,
       components: [rowMenu, rowButtons],
     });
 
