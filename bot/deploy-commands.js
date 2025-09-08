@@ -19,17 +19,17 @@ function loadCommands(dir, isContextMenu = false) {
       try {
         delete require.cache[require.resolve(fullPath)];
         const command = require(fullPath);
-        
+
         if ('data' in command && 'execute' in command) {
           const commandData = command.data.toJSON();
-          
+
           // Si c'est une commande de menu contextuel, s'assurer qu'elle a le bon type
           if (isContextMenu || fullPath.includes('context/')) {
             if (!commandData.type) {
               commandData.type = ApplicationCommandType.User; // Par défaut, menu contextuel utilisateur
             }
           }
-          
+
           commands.push(commandData);
           console.log(`✅ Commande chargée: ${commandData.name} (${commandData.type || 'Slash'})`);
         } else {
