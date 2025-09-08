@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const Warning = require('../../models/Warning');
 const logger = require('../../utils/logger');
+const { t } = require('../../utils/language');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -54,7 +55,15 @@ module.exports = {
       // Créer l'embed
       const embed = new EmbedBuilder()
         .setColor('#ffcc00')
-        .setTitle(`⚠️ Avertissements de ${member.user.tag}`)
+        .setTitle(
+          await t(
+            interaction.guild.id,
+            'warnings.title',
+            { member: member.user.tag },
+            interaction.user.id
+          )
+        )
+
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields(
           {

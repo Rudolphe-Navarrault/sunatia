@@ -1,169 +1,195 @@
-const { Events } = require('discord.js');
+// events/interactionCreate.js
+const {
+  Events,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+} = require('discord.js');
+const Ticket = require('../models/Ticket');
+const TicketSetup = require('../models/TicketSetup');
 const logger = require('../utils/logger');
-const { ensureUser } = require('../middleware/userMiddleware');
 
 module.exports = {
   name: Events.InteractionCreate,
   once: false,
 
   async execute(interaction, client) {
-    await ensureUser(interaction, client);
-
-    // --- MAJ de la dernière activité ---
-    if (interaction.inGuild() && interaction.user && !interaction.user.bot) {
-      try {
-        const UserModel = client.database?.models?.User;
-        if (UserModel?.updateLastActivity) {
-          await UserModel.updateLastActivity(interaction.user.id, interaction.guildId);
-        }
-      } catch (err) {
-        logger.error('Erreur lors de la mise à jour de la dernière activité:', err);
-      }
-    }
-
-    // --- Gestion des erreurs uniformisée ---
-    const handleError = async (
-      err,
-      msg = "Une erreur est survenue lors du traitement de l'interaction."
-    ) => {
-      if (err.code === 10062 || err.code === 40060) return;
-      logger.error(msg, err);
-
-      try {
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: `❌ ${msg}`, ephemeral: true });
-        } else if (interaction.deferred) {
-          await interaction.editReply({ content: `❌ ${msg}`, ephemeral: true });
-        }
-      } catch (replyError) {
-        if (replyError.code !== 10062 && replyError.code !== 40060) {
-          logger.error("Échec de l'envoi du message d'erreur:", replyError);
-        }
-      }
-    };
-
     try {
-      // --- Boutons & menus déroulants ---
-      if (interaction.isButton() || interaction.isStringSelectMenu()) {
-        if (interaction.customId.startsWith('help_') || interaction.customId === 'help_category') {
-          const command = client.commands.get('help');
-          if (!command || !command.handleButton) {
-            return interaction
-              .reply({
-                content: "❌ La commande d'aide n'est pas disponible pour le moment.",
-                ephemeral: true,
-              })
-              .catch(() => {});
-          }
+      // --- Gestion boutons ---
+      if (interaction.isButton()) {
+        // --- Création ticket ---
+        if (interaction.customId === 'ticket_create') {
+          const guild = interaction.guild;
+          const member = interaction.member;
 
+          // Vérifier si ticket existant
+          const existing = await Ticket.findOne({
+            guildId: guild.id,
+            userId: member.id,
+            status: { $in: ['open', 'paused'] },
+          });
+          if (existing)
+            return interaction.reply({
+              content: '❌ Vous avez déjà un ticket ouvert.',
+              ephemeral: true,
+            });
+
+          // Catégorie ticket
+          const category = guild.channels.cache.find(
+            (c) => c.name.toLowerCase().includes('tickets') && c.type === 4
+          );
+
+          // Raison sélectionnée (dropdown)
+          let selectedReason = 'Support général';
           try {
-            await command.handleButton(interaction);
-          } catch (error) {
-            logger.error('Erreur dans handleButton (help):', error);
-            if (!interaction.replied && !interaction.deferred) {
-              await interaction
-                .reply({
-                  content: '❌ Une erreur est survenue lors du traitement de votre action.',
-                  ephemeral: true,
-                })
-                .catch(() => {});
+            const setup = await TicketSetup.findOne({ guildId: guild.id });
+            if (setup) {
+              const msg = await interaction.channel.messages.fetch(setup.messageId);
+              const menu = msg.components[0].components[0];
+              const value = menu.options.find((opt) => opt.default)?.value;
+              if (value) selectedReason = value;
             }
-          }
-          return;
+          } catch {}
+
+          // Création channel
+          const ticketChannel = await guild.channels.create({
+            name: `ticket-${member.user.username}`,
+            type: 0,
+            parent: category?.id || null,
+            permissionOverwrites: [
+              { id: guild.roles.everyone.id, deny: ['ViewChannel'] },
+              { id: member.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            ],
+          });
+
+          // Sauvegarde DB
+          await Ticket.create({
+            guildId: guild.id,
+            channelId: ticketChannel.id,
+            userId: member.id,
+            reason: selectedReason,
+            status: 'open',
+          });
+
+          // Message dans le ticket
+          const closeBtn = new ButtonBuilder()
+            .setCustomId('ticket_close_confirm')
+            .setLabel('🔒 Fermer')
+            .setStyle(ButtonStyle.Danger);
+          const pauseBtn = new ButtonBuilder()
+            .setCustomId('ticket_pause')
+            .setLabel('⏸ Pause')
+            .setStyle(ButtonStyle.Secondary);
+          const resumeBtn = new ButtonBuilder()
+            .setCustomId('ticket_resume')
+            .setLabel('▶️ Reprendre')
+            .setStyle(ButtonStyle.Success);
+          const archiveBtn = new ButtonBuilder()
+            .setCustomId('ticket_archive')
+            .setLabel('📦 Archiver')
+            .setStyle(ButtonStyle.Primary);
+          const row = new ActionRowBuilder().addComponents(
+            closeBtn,
+            pauseBtn,
+            resumeBtn,
+            archiveBtn
+          );
+
+          await ticketChannel.send({
+            content: `🎫 **Ticket pour ${member.user.tag}**
+• Raison : **${selectedReason}**
+
+Merci de patienter, un membre du support va arriver bientôt !  
+Veuillez ne pas partager vos informations personnelles.  
+Les actions disponibles sont ci-dessous :`,
+            components: [row],
+          });
+
+          return interaction.reply({
+            content: `✅ Ticket créé : ${ticketChannel}`,
+            ephemeral: true,
+          });
         }
 
-        // Autres boutons custom
-        if (interaction.isButton()) {
-          const [type, action, ...params] = interaction.customId.split('_');
-          const handler = client.interactionHandlers?.buttons?.[type];
-          if (handler) {
+        // --- Actions sur le ticket ---
+        const ticket = await Ticket.findOne({ channelId: interaction.channel.id });
+        if (!ticket)
+          return interaction.reply({
+            content: '❌ Ce salon n’est pas un ticket.',
+            ephemeral: true,
+          });
+
+        if (interaction.customId === 'ticket_close_confirm') {
+          ticket.status = 'closed';
+          await ticket.save();
+          await interaction.reply({
+            content: '🔒 Ticket fermé, suppression automatique dans 1 minute...',
+            ephemeral: true,
+          });
+
+          // Suppression auto
+          setTimeout(async () => {
             try {
-              return await handler(interaction, action, ...params);
-            } catch (err) {
-              return handleError(err, `Erreur lors du traitement du bouton "${type}"`);
-            }
-          }
+              await interaction.channel.delete('Ticket fermé automatiquement');
+            } catch {}
+          }, 60 * 1000);
+        }
+
+        if (interaction.customId === 'ticket_pause') {
+          ticket.status = 'paused';
+          await ticket.save();
+          return interaction.reply({ content: '⏸ Ticket mis en pause.', ephemeral: true });
+        }
+
+        if (interaction.customId === 'ticket_resume') {
+          ticket.status = 'open';
+          await ticket.save();
+          return interaction.reply({ content: '▶️ Ticket repris.', ephemeral: true });
+        }
+
+        if (interaction.customId === 'ticket_archive') {
+          ticket.status = 'archived';
+          await ticket.save();
+          return interaction.reply({ content: '📦 Ticket archivé.', ephemeral: true });
+        }
+      }
+
+      // --- Menus déroulants ---
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'ticket_reason_select') {
+          // On peut stocker la sélection dans la DB temporairement si besoin
+          return interaction.reply({
+            content: `✅ Raison sélectionnée : ${interaction.values[0]}`,
+            ephemeral: true,
+          });
         }
       }
 
       // --- Slash commands ---
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-        if (!command) {
-          return handleError("Cette commande n'existe plus ou n'est pas disponible.");
-        }
-
-        // ✅ Vérification des permissions customisées
-        const allowed = await client.hasCommandPermission(
-          interaction.user.id,
-          interaction.commandName,
-          interaction.guild.id
-        );
-        if (!allowed) {
-          return interaction.reply({
-            content: '❌ Vous n’avez pas la permission pour utiliser cette commande.',
-            ephemeral: true,
-          });
-        }
+        if (!command)
+          return interaction.reply({ content: '❌ Cette commande n’existe pas.', ephemeral: true });
 
         try {
           await command.execute(interaction, client);
-        } catch (error) {
-          await handleError(
-            error,
-            `Erreur lors de l'exécution de la commande ${interaction.commandName}`
-          );
+        } catch (err) {
+          logger.error(`Erreur commande ${interaction.commandName} :`, err);
+          if (!interaction.replied)
+            interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
         }
       }
 
-      // --- Menus contextuels ---
-      else if (interaction.isUserContextMenuCommand()) {
-        const command = client.commands.get(`context:${interaction.commandName}`);
-        if (!command) {
-          return handleError(
-            "Cette commande de menu contextuel n'existe plus ou n'est pas disponible."
-          );
-        }
-
-        // ✅ Vérification des permissions customisées
-        const allowed = await client.hasCommandPermission(
-          interaction.user.id,
-          interaction.commandName,
-          interaction.guild.id
-        );
-        if (!allowed) {
-          return interaction.reply({
-            content: '❌ Vous n’avez pas la permission pour utiliser ce menu contextuel.',
-            ephemeral: true,
-          });
-        }
-
-        try {
-          await command.execute(interaction, client);
-        } catch (error) {
-          await handleError(
-            error,
-            `Erreur lors de l'exécution du menu contextuel ${interaction.commandName}`
-          );
-        }
-      }
-
-      // --- Autocomplétion ---
+      // --- Autocompletion ---
       if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
-        if (!command?.autocomplete) return;
-
-        try {
-          return await command.autocomplete(interaction, client);
-        } catch (err) {
-          return handleError(
-            err,
-            `Erreur lors de l'autocomplétion de "${interaction.commandName}"`
-          );
-        }
+        if (command?.autocomplete) await command.autocomplete(interaction, client);
       }
     } catch (err) {
-      await handleError(err);
+      console.error('Erreur interactionCreate :', err);
+      if (!interaction.replied)
+        interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
     }
   },
 };

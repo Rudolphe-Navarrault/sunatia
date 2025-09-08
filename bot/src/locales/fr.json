@@ -1,0 +1,17 @@
+{
+  "LANGUAGE_UPDATED_USER": "✅ Votre langue personnelle est maintenant {lang}.",
+  "LANGUAGE_UPDATED_SERVER": "✅ Langue du serveur définie sur {lang}.",
+  "UNKNOWN_LANGUAGE": "❌ Langue inconnue : {lang}.",
+
+  "warnings": {
+    "title": "Avertissements de {{member}}",
+    "total_points": "📊 Points totaux",
+    "active_points": "points d'avertissement actifs",
+    "active_warnings": "📝 Avertissements actifs",
+    "in_progress": "avertissement(s) en cours",
+    "none": "Aucun avertissement actif pour ce membre.",
+    "points": "point(s)",
+    "reason": "Raison",
+    "by": "Par"
+  }
+}
