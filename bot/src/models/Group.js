@@ -1,14 +1,9 @@
 const mongoose = require('mongoose');
 
-const groupSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    guildId: { type: String, required: true },
-    permissions: { type: [String], default: [] },
-  },
-  { timestamps: true }
-);
+const GroupSchema = new mongoose.Schema({
+  guildId: { type: String, required: true }, // Pour le serveur
+  name: { type: String, required: true },
+  permissions: { type: [String], default: [] },
+});
 
-groupSchema.index({ name: 1, guildId: 1 }, { unique: true });
-
-module.exports = mongoose.model('Group', groupSchema);
+module.exports = mongoose.model('Group', GroupSchema);

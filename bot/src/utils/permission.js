@@ -13,24 +13,28 @@ function invalidateUserCache(guildId, userId) {
 /**
  * Invalide le cache de groupe
  */
-function invalidateGroupCache(guildId, groupName) {}
+function invalidateGroupCache(guildId, groupName) {
+  // Ici tu peux mettre ton système de cache si tu en as
+}
 
 /**
  * Invalide le cache de commande
  */
-function invalidateCommandCache(guildId, command) {}
+function invalidateCommandCache(guildId, command) {
+  // Ici tu peux mettre ton système de cache si tu en as
+}
 
 /**
- * Vérifie si une permission existe
+ * Vérifie si une permission existe dans un serveur spécifique
  */
-async function permissionExists(permission) {
+async function permissionExists(guildId, permission) {
   if (!permission) return false;
-  const perm = await Permission.findOne({ name: permission.toLowerCase() });
+  const perm = await Permission.findOne({ guildId, name: permission.toLowerCase() });
   return !!perm;
 }
 
 /**
- * Vérifie si un utilisateur a une permission
+ * Vérifie si un utilisateur a une permission dans un serveur spécifique
  */
 async function userHasPermission(guildId, userId, permission) {
   const user = await User.findOne({ guildId, userId });
@@ -49,7 +53,7 @@ async function userHasPermission(guildId, userId, permission) {
 }
 
 /**
- * Vérifie si un groupe a une permission
+ * Vérifie si un groupe a une permission dans un serveur spécifique
  */
 async function groupHasPermission(guildId, groupName, permission) {
   const group = await Group.findOne({
@@ -61,7 +65,7 @@ async function groupHasPermission(guildId, groupName, permission) {
 }
 
 /**
- * Vérifie si un utilisateur peut exécuter une commande
+ * Vérifie si un utilisateur peut exécuter une commande dans un serveur spécifique
  */
 async function hasCommandPermission(guildId, userId, command) {
   const cmdPerm = await CommandPerm.findOne({ guildId, command });

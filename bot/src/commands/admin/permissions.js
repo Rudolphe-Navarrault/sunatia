@@ -5,10 +5,12 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
+
 const User = require('../../models/User');
 const Group = require('../../models/Group');
 const CommandPerm = require('../../models/CommandPerm');
 const Permission = require('../../models/Permission');
+
 const {
   invalidateUserCache,
   invalidateGroupCache,
@@ -24,7 +26,8 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('permissions')
     .setDescription('Gérer les permissions du serveur')
-    // --- USER ---
+
+    // USER
     .addSubcommandGroup((group) =>
       group
         .setName('user')
@@ -52,7 +55,8 @@ module.exports = {
             )
         )
     )
-    // --- GROUPS ---
+
+    // GROUPS
     .addSubcommandGroup((group) =>
       group
         .setName('groups')
@@ -96,7 +100,8 @@ module.exports = {
             )
         )
     )
-    // --- CREATE / REMOVE PERMISSIONS ---
+
+    // CREATE / REMOVE PERMISSIONS
     .addSubcommand((sub) =>
       sub
         .setName('create')
@@ -113,26 +118,29 @@ module.exports = {
           opt.setName('permission').setDescription('Nom de la permission').setRequired(true)
         )
     )
-    // --- LIST ---
-    .addSubcommandGroup((group) =>
-      group
+
+    // LIST
+    .addSubcommand((sub) =>
+      sub
         .setName('list')
         .setDescription('Lister les permissions')
-        .addSubcommand((sub) => sub.setName('all').setDescription('Lister toutes les permissions'))
-        .addSubcommand((sub) =>
-          sub
+        .addStringOption((opt) =>
+          opt
+            .setName('type')
+            .setDescription('All ou Permission')
+            .setRequired(true)
+            .addChoices({ name: 'All', value: 'all' }, { name: 'Permission', value: 'permission' })
+        )
+        .addStringOption((opt) =>
+          opt
             .setName('permission')
-            .setDescription('Lister les utilisateurs/groupes ayant une permission')
-            .addStringOption((opt) =>
-              opt
-                .setName('permission')
-                .setDescription('Choisissez la permission')
-                .setRequired(true)
-                .setAutocomplete(true)
-            )
+            .setDescription('Choisissez la permission spécifique')
+            .setAutocomplete(true)
+            .setRequired(false)
         )
     )
-    // --- CHECK ---
+
+    // CHECK
     .addSubcommand((sub) =>
       sub
         .setName('check')
@@ -143,7 +151,8 @@ module.exports = {
         .addUserOption((opt) => opt.setName('utilisateur').setDescription('Utilisateur à vérifier'))
         .addStringOption((opt) => opt.setName('groupe').setDescription('Groupe à vérifier'))
     )
-    // --- COMMANDS ---
+
+    // COMMANDS
     .addSubcommandGroup((group) =>
       group
         .setName('commands')
@@ -182,11 +191,11 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focused = interaction.options.getFocused();
-    const subcommandGroup = interaction.options.getSubcommandGroup(false);
-    const subcommand = interaction.options.getSubcommand(false);
+    const sub = interaction.options.getSubcommand();
+    const group = interaction.options.getSubcommandGroup(false);
 
-    // Autocomplete pour les commandes
-    if (subcommandGroup === 'commands') {
+    // Autocomplete commandes
+    if (group === 'commands') {
       const choices = Array.from(interaction.client.commands.keys());
       const filtered = focused
         ? choices.filter((c) => c.toLowerCase().startsWith(focused.toLowerCase()))
@@ -194,15 +203,20 @@ module.exports = {
       await interaction.respond(filtered.slice(0, 25).map((c) => ({ name: c, value: c })));
     }
 
-    // Autocomplete pour permissions dans /permissions list permission
-    if (subcommandGroup === 'list' && subcommand === 'permission') {
-      const perms = await Permission.find({});
-      const filtered = focused
-        ? perms.filter((p) => p.name.toLowerCase().startsWith(focused.toLowerCase()))
-        : perms;
-      await interaction.respond(
-        filtered.slice(0, 25).map((p) => ({ name: p.name, value: p.name }))
-      );
+    // Autocomplete permissions pour /permissions list type=permission
+    if (sub === 'list') {
+      const type = interaction.options.getString('type');
+      if (type === 'permission') {
+        const perms = await Permission.find({ guildId: interaction.guild.id });
+        const filtered = focused
+          ? perms.filter((p) => p.name.toLowerCase().startsWith(focused.toLowerCase()))
+          : perms;
+        await interaction.respond(
+          filtered.slice(0, 25).map((p) => ({ name: p.name, value: p.name }))
+        );
+      } else {
+        await interaction.respond([]); // All = rien à compléter
+      }
     }
   },
 
@@ -214,7 +228,7 @@ module.exports = {
     if (group === 'user') {
       const member = interaction.options.getUser('utilisateur');
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(interaction.guild.id, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -251,7 +265,10 @@ module.exports = {
       const groupName = interaction.options.getString('groupe');
       const permission = interaction.options.getString('permission')?.toLowerCase();
 
-      if (['set', 'unset'].includes(sub) && !(await permissionExists(permission)))
+      if (
+        ['set', 'unset'].includes(sub) &&
+        !(await permissionExists(interaction.guild.id, permission))
+      )
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -323,12 +340,12 @@ module.exports = {
     // --- CREATE / REMOVE PERMISSIONS ---
     if (sub === 'create') {
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (await permissionExists(permission))
+      if (await permissionExists(interaction.guild.id, permission))
         return interaction.reply({
           content: `❌ La permission "${permission}" existe déjà.`,
           ephemeral: true,
         });
-      await new Permission({ name: permission }).save();
+      await new Permission({ guildId: interaction.guild.id, name: permission }).save();
       return interaction.reply({
         content: `✅ Permission "${permission}" créée.`,
         ephemeral: true,
@@ -337,7 +354,7 @@ module.exports = {
 
     if (sub === 'remove') {
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(interaction.guild.id, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -354,7 +371,7 @@ module.exports = {
         { guildId: interaction.guild.id },
         { $pull: { permissions: permission } }
       );
-      await Permission.deleteOne({ name: permission });
+      await Permission.deleteOne({ guildId: interaction.guild.id, name: permission });
       return interaction.reply({
         content: `✅ Permission "${permission}" supprimée partout.`,
         ephemeral: true,
@@ -362,38 +379,23 @@ module.exports = {
     }
 
     // --- LIST ---
-    if (group === 'list') {
+    if (sub === 'list') {
+      const type = interaction.options.getString('type');
       let items = [];
 
-      if (sub === 'all') {
-        const allPerms = await Permission.find({});
-        items = allPerms.map((p) => p.name);
-
-        const users = await User.find({ guildId: interaction.guild.id });
-        const groups = await Group.find({ guildId: interaction.guild.id });
-
-        users.forEach((u) => u.permissions.forEach((p) => items.push(p)));
-        groups.forEach((g) => g.permissions.forEach((p) => items.push(p)));
-
-        items = [...new Set(items)]; // Supprime doublons
-      }
-
-      if (sub === 'permission') {
-        const permissionName = interaction.options.getString('permission')?.toLowerCase();
-        if (!(await permissionExists(permissionName)))
+      if (type === 'all') {
+        const perms = await Permission.find({ guildId: interaction.guild.id });
+        items = perms.map((p) => p.name);
+      } else {
+        const permission = interaction.options.getString('permission')?.toLowerCase();
+        if (!(await permissionExists(interaction.guild.id, permission)))
           return interaction.reply({
-            content: `❌ La permission "${permissionName}" n'existe pas.`,
+            content: `❌ La permission "${permission}" n'existe pas.`,
             ephemeral: true,
           });
 
-        const users = await User.find({
-          guildId: interaction.guild.id,
-          permissions: permissionName,
-        });
-        const groups = await Group.find({
-          guildId: interaction.guild.id,
-          permissions: permissionName,
-        });
+        const users = await User.find({ guildId: interaction.guild.id, permissions: permission });
+        const groups = await Group.find({ guildId: interaction.guild.id, permissions: permission });
 
         items = [
           `**Utilisateurs:** ${users.map((u) => `<@${u.userId}>`).join(', ') || 'Aucun'}`,
@@ -404,11 +406,10 @@ module.exports = {
       if (!items.length)
         return interaction.reply({ content: 'ℹ️ Aucune permission trouvée.', ephemeral: true });
 
-      // Pagination
       const page = 1;
       const totalPages = Math.ceil(items.length / PER_PAGE);
       const embed = new EmbedBuilder()
-        .setTitle(`📋 Permissions`)
+        .setTitle('📋 Permissions')
         .setColor('#00bfff')
         .setDescription(items.slice(0, PER_PAGE).join('\n'))
         .setFooter({ text: `Page ${page}/${totalPages}` });
@@ -427,7 +428,7 @@ module.exports = {
       );
 
       await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-
+      interaction.client.permissionPages = interaction.client.permissionPages || new Map();
       interaction.client.permissionPages.set('1', {
         items,
         currentPage: 1,
@@ -443,7 +444,7 @@ module.exports = {
       const user = interaction.options.getUser('utilisateur');
       const groupName = interaction.options.getString('groupe');
 
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(interaction.guild.id, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,
@@ -488,7 +489,7 @@ module.exports = {
     if (group === 'commands') {
       const command = interaction.options.getString('commande');
       const permission = interaction.options.getString('permission')?.toLowerCase();
-      if (!(await permissionExists(permission)))
+      if (!(await permissionExists(interaction.guild.id, permission)))
         return interaction.reply({
           content: `❌ La permission "${permission}" n'existe pas.`,
           ephemeral: true,

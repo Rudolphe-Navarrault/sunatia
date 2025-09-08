@@ -1,11 +1,11 @@
 const mongoose = require('mongoose');
 
-const commandPermSchema = new mongoose.Schema({
-  guildId: { type: String, required: true },
+const CommandPermSchema = new mongoose.Schema({
+  guildId: { type: String, required: true }, // Pour le serveur
   command: { type: String, required: true },
-  permissions: { type: [String], default: [] }, // permissions nécessaires pour cette commande
+  permissions: { type: [String], default: [] },
 });
 
-commandPermSchema.index({ guildId: 1, command: 1 }, { unique: true });
+CommandPermSchema.index({ guildId: 1, command: 1 }, { unique: true });
 
-module.exports = mongoose.model('CommandPerm', commandPermSchema);
+module.exports = mongoose.model('CommandPerm', CommandPermSchema);

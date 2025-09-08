@@ -59,7 +59,7 @@ userSchema.statics.findOrCreate = async function (query, defaults = {}) {
       lastSeen: new Date(),
       stats: { level: 1, xp: 0, messages: 0, voiceTime: 0, lastMessage: null, lastVoiceJoin: null },
       groups: [], // initialisation vide
-      permissions: [], // initialisation vide
+      permissions: { type: [String], default: [] },
       ...defaults,
     });
     await user.save();
