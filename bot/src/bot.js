@@ -74,9 +74,8 @@ class SunatiaBot extends Client {
       await this.loadEvents();
       await this.loadInteractionHandlers();
 
-      const { initializeStatsChannels, setClient } = require('./utils/stats-vocal');
-      setClient(this);
-      await initializeStatsChannels();
+      const { initializeStatsChannels } = require('./utils/stats-vocal');
+      await initializeStatsChannels(this); // <-- this = le client
 
       const { startBankCron } = require('./utils/bankCron');
       startBankCron();

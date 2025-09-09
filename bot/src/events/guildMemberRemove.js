@@ -1,11 +1,11 @@
 const { Events } = require('discord.js');
-const { statsChannels, updateMemberCount } = require('../utils/stats-vocal');
+const { updateMemberCount } = require('../utils/stats-vocal');
 const logger = require('../utils/logger');
 
 module.exports = {
   name: Events.GuildMemberRemove,
   once: false,
-  
+
   /**
    * Gère l'événement de départ d'un membre du serveur
    * @param {GuildMember} member - Le membre qui est parti
@@ -14,19 +14,15 @@ module.exports = {
   async execute(member, client) {
     try {
       logger.info(`Membre parti: ${member.user.tag} (${member.id}) de ${member.guild.name}`);
-      
+
       // Ne pas traiter les bots
       if (member.user.bot) return;
-      
-      // Vérifier si un salon de statistiques est configuré pour ce serveur
-      if (statsChannels.has(member.guild.id)) {
-        logger.info(`Mise à jour du compteur après le départ de ${member.user.tag}`);
+
+      // 🔥 Mettre à jour le compteur de membres avec un petit délai
+      setTimeout(async () => {
+        await member.guild.members.fetch(); // s'assure que memberCount est à jour
         await updateMemberCount(member.guild);
-      }
-      
-      // Vous pouvez ajouter ici d'autres actions à effectuer lors du départ d'un membre
-      // Par exemple, envoyer un message dans un salon de logs
-      
+      }, 1000); // 1 seconde
     } catch (error) {
       logger.error(`Erreur lors du traitement du départ de ${member.user.tag}:`, error);
     }

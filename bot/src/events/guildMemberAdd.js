@@ -1,6 +1,6 @@
 const { Events } = require('discord.js');
 const { GuildSettings } = require('../models/GuildSettings');
-const { statsChannels, updateMemberCount } = require('../utils/stats-vocal');
+const { updateMemberCount } = require('../utils/stats-vocal');
 const logger = require('../utils/logger');
 const User = require('../models/User');
 
@@ -8,33 +8,28 @@ module.exports = {
   name: Events.GuildMemberAdd,
   once: false,
 
-  /**
-   * Gère l'événement d'arrivée d'un nouveau membre sur le serveur
-   * @param {GuildMember} member - Le membre qui a rejoint
-   * @param {Client} client - L'instance du client Discord
-   */
   async execute(member, client) {
     try {
       logger.info(`Nouveau membre: ${member.user.tag} (${member.id}) sur ${member.guild.name}`);
-      
+
       // Créer ou mettre à jour l'utilisateur dans la base de données
-      const user = await User.findOrCreate({
+      await User.findOrCreate({
         userId: member.id,
         guildId: member.guild.id,
         username: member.user.username,
         discriminator: member.user.discriminator,
         bot: member.user.bot,
         avatar: member.user.avatar,
-        joinedAt: member.joinedAt
+        joinedAt: member.joinedAt,
       });
 
       logger.info(`✅ Membre enregistré: ${member.user.tag} (${member.id})`);
 
-      // Mettre à jour le compteur de membres si un salon de stats existe
-      if (statsChannels.has(member.guild.id)) {
-        logger.info(`Mise à jour du compteur pour le nouveau membre: ${member.user.tag}`);
+      // 🔥 Mettre à jour le compteur de membres avec un petit délai
+      setTimeout(async () => {
+        await member.guild.members.fetch(); // assure que memberCount est à jour
         await updateMemberCount(member.guild);
-      }
+      }, 1000); // 1 seconde
     } catch (error) {
       logger.error(`Erreur lors de l'enregistrement du membre ${member.user.tag}:`, error);
     }
