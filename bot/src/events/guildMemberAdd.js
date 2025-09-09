@@ -1,18 +1,16 @@
 const { Events } = require('discord.js');
-const { GuildSettings } = require('../models/GuildSettings');
-const { updateMemberCount } = require('../utils/stats-vocal');
+const { scheduleUpdate } = require('../utils/stats-vocal');
 const logger = require('../utils/logger');
 const User = require('../models/User');
+const { GuildSettings } = require('../models/GuildSettings');
 
 module.exports = {
   name: Events.GuildMemberAdd,
   once: false,
+  async execute(member) {
+    if (member.user.bot) return;
 
-  async execute(member, client) {
     try {
-      logger.info(`Nouveau membre: ${member.user.tag} (${member.id}) sur ${member.guild.name}`);
-
-      // Créer ou mettre à jour l'utilisateur dans la base de données
       await User.findOrCreate({
         userId: member.id,
         guildId: member.guild.id,
@@ -23,38 +21,27 @@ module.exports = {
         joinedAt: member.joinedAt,
       });
 
-      logger.info(`✅ Membre enregistré: ${member.user.tag} (${member.id})`);
+      logger.info(`✅ Membre enregistré: ${member.user.tag}`);
 
-      // 🔥 Mettre à jour le compteur de membres avec un petit délai
-      setTimeout(async () => {
-        await member.guild.members.fetch(); // assure que memberCount est à jour
-        await updateMemberCount(member.guild);
-      }, 1000); // 1 seconde
-    } catch (error) {
-      logger.error(`Erreur lors de l'enregistrement du membre ${member.user.tag}:`, error);
+      scheduleUpdate(member.guild); // 🔥 Mettre à jour le compteur
+    } catch (err) {
+      logger.error(`Erreur lors de l'ajout du membre ${member.user.tag}:`, err);
     }
 
-    // Envoyer un message de bienvenue
+    // Envoyer message de bienvenue
     try {
       const settings = await GuildSettings.findOne({ guildId: member.guild.id });
-      if (!settings || !settings.welcomeChannelId) return;
+      if (!settings?.welcomeChannelId) return;
 
       const welcomeChannel = member.guild.channels.cache.get(settings.welcomeChannelId);
       if (!welcomeChannel) return;
 
-      const welcomeMessage =
-        `Bienvenue ${member} sur **${member.guild.name}** ! 👋\n` +
-        `Tu es le ${member.guild.memberCount.toLocaleString()}ème membre !`;
-
       await welcomeChannel.send({
-        content: welcomeMessage,
+        content: `Bienvenue ${member} sur **${member.guild.name}** ! 👋\nTu es le ${member.guild.memberCount.toLocaleString()}ème membre !`,
         allowedMentions: { users: [member.id] },
       });
     } catch (err) {
-      console.error(
-        `❌ Impossible d'envoyer le message de bienvenue pour ${member.user.tag}:`,
-        err
-      );
+      logger.error(`Impossible d'envoyer le message de bienvenue pour ${member.user.tag}:`, err);
     }
   },
 };

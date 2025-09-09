@@ -40,7 +40,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.8.1' : '⚡ Sunatia | v1.8.1',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.8.2' : '⚡ Sunatia | v1.8.2',
             type: 4,
           },
         ],
@@ -73,9 +73,6 @@ class SunatiaBot extends Client {
       await this.loadCommands();
       await this.loadEvents();
       await this.loadInteractionHandlers();
-
-      const { initializeStatsChannels } = require('./utils/stats-vocal');
-      await initializeStatsChannels(this); // <-- this = le client
 
       const { startBankCron } = require('./utils/bankCron');
       startBankCron();
@@ -114,6 +111,15 @@ class SunatiaBot extends Client {
 
       const token = this.isDev ? process.env.DISCORD_TOKEN_DEV : process.env.DISCORD_TOKEN;
       await this.login(token);
+
+      // 🚀 Initialiser les compteurs APRÈS connexion
+      this.once('ready', async () => {
+        console.log(`✅ Bot connecté en tant que ${this.user.tag}`);
+
+        const { initializeStatsChannels } = require('./utils/stats-vocal');
+        await initializeStatsChannels(this);
+        console.log('📊 Compteurs membres initialisés');
+      });
 
       console.log(`✅ Bot démarré et prêt (${this.isDev ? 'DEV' : 'PROD'})`);
     } catch (error) {

@@ -61,9 +61,9 @@ const mode = process.argv[2];
 
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN_DEV);
 
-      console.log('🚀 Déploiement des commandes GLOBAL (prod)...');
+      console.log('🚀 Déploiement des commandes GLOBAL (dev)...');
       await rest.put(Routes.applicationCommands(process.env.CLIENT_ID_DEV), { body: commands });
-      console.log(`✅ ${commands.length} commandes globales déployées sur le bot PROD !`);
+      console.log(`✅ ${commands.length} commandes globales déployées sur le bot DEV !`);
     } else if (mode === '--prod') {
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
