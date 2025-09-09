@@ -1,6 +1,6 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const GuildConfig = require('../../models/GuildConfig');
-const { scheduleUpdate } = require('../../utils/stats-vocal');
+const { updateMemberCount } = require('../../utils/stats-vocal');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,18 +21,19 @@ module.exports = {
 
     let config = await GuildConfig.findOne({ guildId: guild.id });
 
+    // ---- AJOUTER le salon compteur ----
     if (action === 'add') {
-      if (config && config.memberCountChannelId) {
+      if (config?.memberCountChannelId) {
         return interaction.reply({
           content: '❌ Un salon compteur existe déjà sur ce serveur.',
           ephemeral: true,
         });
       }
 
-      const memberCount = guild.memberCount;
+      // Créer le salon vocal
       const channel = await guild.channels.create({
-        name: `👥 Membres : ${memberCount}`,
-        type: 2, // voice
+        name: `👥 Membres : ${guild.memberCount}`,
+        type: ChannelType.GuildVoice,
         permissionOverwrites: [
           {
             id: guild.roles.everyone.id,
@@ -45,7 +46,8 @@ module.exports = {
       config.memberCountChannelId = channel.id;
       await config.save();
 
-      scheduleUpdate(guild);
+      // Mettre à jour immédiatement le compteur (juste au cas où)
+      await updateMemberCount(guild);
 
       return interaction.reply({
         content: `✅ Salon compteur créé : ${channel}`,
@@ -53,18 +55,23 @@ module.exports = {
       });
     }
 
+    // ---- SUPPRIMER le salon compteur ----
     if (action === 'remove') {
-      if (!config || !config.memberCountChannelId) {
+      if (!config?.memberCountChannelId) {
         return interaction.reply({
           content: '❌ Aucun salon compteur trouvé sur ce serveur.',
           ephemeral: true,
         });
       }
 
-      try {
-        const channel = guild.channels.cache.get(config.memberCountChannelId);
-        if (channel) await channel.delete();
-      } catch {}
+      const channel = guild.channels.cache.get(config.memberCountChannelId);
+      if (channel) {
+        try {
+          await channel.delete();
+        } catch (err) {
+          console.error(err);
+        }
+      }
 
       await GuildConfig.deleteOne({ guildId: guild.id });
 
