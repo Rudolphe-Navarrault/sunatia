@@ -5,10 +5,17 @@ const logger = require('../utils/logger');
 module.exports = {
   name: Events.GuildMemberRemove,
   once: false,
-  async execute(member) {
-    if (member.user.bot) return;
 
-    logger.info(`Membre parti: ${member.user.tag}`);
-    scheduleUpdate(member.guild); // 🔥 Mettre à jour le compteur
+  async execute(member, client) {
+    try {
+      logger.info(`Membre parti: ${member.user.tag} de ${member.guild.name}`);
+
+      if (member.user.bot) return;
+
+      // Mettre à jour le compteur
+      scheduleUpdate(member.guild);
+    } catch (err) {
+      logger.error(`Erreur lors du départ du membre ${member.user.tag}:`, err);
+    }
   },
 };

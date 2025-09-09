@@ -1,28 +1,27 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../models/GuildConfig');
+const { scheduleUpdate } = require('../../utils/stats-vocal');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup-membercount')
-    .setDescription('Gérer le salon compteur de membres')
+    .setDescription('Créer ou supprimer un salon vocal affichant le nombre de membres')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand((sub) =>
-      sub
-        .setName('add')
-        .setDescription('Créer un salon vocal affichant le nombre de membres du serveur')
-    )
-    .addSubcommand((sub) =>
-      sub.setName('remove').setDescription('Supprimer le salon compteur de membres existant')
+    .addStringOption((option) =>
+      option
+        .setName('action')
+        .setDescription('Ajouter ou supprimer le salon compteur')
+        .setRequired(true)
+        .addChoices({ name: 'Ajouter', value: 'add' }, { name: 'Supprimer', value: 'remove' })
     ),
 
   async execute(interaction) {
     const guild = interaction.guild;
-    const subcommand = interaction.options.getSubcommand();
+    const action = interaction.options.getString('action');
 
     let config = await GuildConfig.findOne({ guildId: guild.id });
 
-    if (subcommand === 'add') {
-      // Vérifier si déjà configuré
+    if (action === 'add') {
       if (config && config.memberCountChannelId) {
         return interaction.reply({
           content: '❌ Un salon compteur existe déjà sur ce serveur.',
@@ -30,25 +29,23 @@ module.exports = {
         });
       }
 
-      // Créer le salon vocal
       const memberCount = guild.memberCount;
       const channel = await guild.channels.create({
         name: `👥 Membres : ${memberCount}`,
-        type: 2, // salon vocal
+        type: 2, // voice
         permissionOverwrites: [
           {
             id: guild.roles.everyone.id,
-            deny: ['Connect'], // empêche de rejoindre
+            deny: ['Connect'],
           },
         ],
       });
 
-      // Sauvegarder en DB
-      if (!config) {
-        config = new GuildConfig({ guildId: guild.id });
-      }
+      if (!config) config = new GuildConfig({ guildId: guild.id });
       config.memberCountChannelId = channel.id;
       await config.save();
+
+      scheduleUpdate(guild);
 
       return interaction.reply({
         content: `✅ Salon compteur créé : ${channel}`,
@@ -56,11 +53,10 @@ module.exports = {
       });
     }
 
-    if (subcommand === 'remove') {
-      // Vérifier si configuré
+    if (action === 'remove') {
       if (!config || !config.memberCountChannelId) {
         return interaction.reply({
-          content: '❌ Aucun salon compteur n’est configuré sur ce serveur.',
+          content: '❌ Aucun salon compteur trouvé sur ce serveur.',
           ephemeral: true,
         });
       }
@@ -68,22 +64,14 @@ module.exports = {
       try {
         const channel = guild.channels.cache.get(config.memberCountChannelId);
         if (channel) await channel.delete();
+      } catch {}
 
-        // Supprimer de la DB
-        config.memberCountChannelId = null;
-        await config.save();
+      await GuildConfig.deleteOne({ guildId: guild.id });
 
-        return interaction.reply({
-          content: '✅ Salon compteur supprimé avec succès.',
-          ephemeral: true,
-        });
-      } catch (err) {
-        console.error('❌ Erreur suppression salon compteur:', err);
-        return interaction.reply({
-          content: '❌ Impossible de supprimer le salon compteur.',
-          ephemeral: true,
-        });
-      }
+      return interaction.reply({
+        content: '✅ Salon compteur supprimé et configuration effacée.',
+        ephemeral: true,
+      });
     }
   },
 };

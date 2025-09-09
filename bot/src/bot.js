@@ -40,7 +40,7 @@ class SunatiaBot extends Client {
         status: 'online',
         activities: [
           {
-            name: isDev ? '⚡ Sunatia [DEV] | v1.8.2' : '⚡ Sunatia | v1.8.2',
+            name: isDev ? '⚡ Sunatia [DEV] | v1.8.3' : '⚡ Sunatia | v1.8.3',
             type: 4,
           },
         ],

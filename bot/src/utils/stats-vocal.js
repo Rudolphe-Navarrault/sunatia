@@ -16,6 +16,9 @@ async function updateMemberCount(guild) {
       return;
     }
 
+    // Fetch complet pour que memberCount soit exact
+    await guild.members.fetch();
+
     let channel = guild.channels.cache.get(config.memberCountChannelId);
     if (!channel) {
       try {
@@ -50,8 +53,6 @@ function scheduleUpdate(guild) {
     guild.id,
     setTimeout(async () => {
       try {
-        // Force fetch pour que memberCount soit exact
-        await guild.members.fetch();
         await updateMemberCount(guild);
       } catch (err) {
         logger.error(`Erreur lors de la mise à jour du compteur pour ${guild.name}:`, err);
@@ -59,7 +60,7 @@ function scheduleUpdate(guild) {
         guildUpdateTimers.delete(guild.id);
       }
     }, 1000)
-  ); // délai 1 seconde pour éviter trop de mises à jour
+  );
 }
 
 /**
@@ -67,23 +68,10 @@ function scheduleUpdate(guild) {
  * @param {import('discord.js').Client} client
  */
 async function initializeStatsChannels(client) {
-  for (const guild of client.guilds.cache.values()) {
-    try {
-      const config = await GuildConfig.findOne({ guildId: guild.id });
-      if (!config || !config.memberCountChannelId) {
-        logger.info(`ℹ️ Pas de config trouvée pour ${guild.name} (${guild.id})`);
-        continue;
-      }
-
-      logger.info(
-        `✅ Config trouvée pour ${guild.name} (${guild.id}) → Salon ${config.memberCountChannelId}`
-      );
-
-      scheduleUpdate(guild);
-    } catch (err) {
-      logger.error(`❌ Erreur lors de l'init stats pour ${guild.name}:`, err);
-    }
-  }
+  logger.info('📊 Compteurs membres initialisés');
+  client.guilds.cache.forEach((guild) => {
+    scheduleUpdate(guild);
+  });
 }
 
 module.exports = {
