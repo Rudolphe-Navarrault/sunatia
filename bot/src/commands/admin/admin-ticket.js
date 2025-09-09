@@ -67,11 +67,10 @@ module.exports = {
       const msg = await setupChannel.send({
         content: `**${interaction.guild.name} - Support**
 Avant d'ouvrir un ticket:
-• Veuillez voir si vos réponses ne sont pas déjà répondues.
-• Utilisez le salon Entraide.
+• Veuillez voir si vos questions ne sont pas déjà répondues.
 
 ➡️ Sélectionnez une raison puis cliquez sur le bouton ci-dessous.
-Votre ticket sera créé dans **${category.name}**.`,
+Votre ticket sera alors créé dans -> **${category.name}**.`,
         components: [rowMenu, rowButtons],
       });
 
